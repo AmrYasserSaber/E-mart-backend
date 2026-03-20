@@ -3,4 +3,3 @@ export class RegisterDto {
   password!: string;
   // Optional fields can be added later (e.g. name, role, etc.)
 }
-

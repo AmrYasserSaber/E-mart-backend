@@ -21,10 +21,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message:
         typeof resBody === 'string'
           ? resBody
-          : (resBody as any)?.message ?? exception.message,
+          : ((resBody as any)?.message ?? exception.message),
       error: (resBody as any)?.error,
       timestamp: new Date().toISOString(),
     });
   }
 }
-
