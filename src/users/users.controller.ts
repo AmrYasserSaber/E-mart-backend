@@ -1,42 +1,32 @@
 import {
   Controller,
   Get,
-  Post,
-  Body,
-  Patch,
   Param,
-  Delete,
+  UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { toUserPublic, UserPublic } from './entities/user.entity';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
+import { RolesGuard } from '../common/guards/roles.guard';
 
+@ApiTags('users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
-  }
-
-  @Get()
-  findAll() {
-    return this.usersService.findAll();
-  }
-
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(+id, updateUserDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(+id);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  async findOne(@Param('id') id: string): Promise<UserPublic> {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return toUserPublic(user);
   }
 }
