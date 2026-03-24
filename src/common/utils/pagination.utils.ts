@@ -16,4 +16,3 @@ export function getPagination(params: PaginationParams = {}): PaginationResult {
 
   return { page, limit, skip };
 }
-
