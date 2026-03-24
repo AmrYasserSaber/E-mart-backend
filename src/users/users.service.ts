@@ -58,15 +58,15 @@ export class UsersService {
     const user = await this.findById(userId);
     if (!user) return null;
 
-    if (data.firstName !== undefined) {
+    if (data.firstName !== undefined && data.firstName.trim() !== '') {
       user.firstName = data.firstName.trim();
     }
 
-    if (data.lastName !== undefined) {
+    if (data.lastName !== undefined && data.lastName.trim() !== '') {
       user.lastName = data.lastName.trim();
     }
 
-    if (data.email !== undefined) {
+    if (data.email !== undefined && data.email.trim() !== '') {
       const normalizedEmail = this.normalizeEmail(data.email);
       if (normalizedEmail && normalizedEmail !== user.email) {
         user.email = normalizedEmail;
