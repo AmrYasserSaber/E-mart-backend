@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { Role } from '../common/enums/role.enum';
+import { UpdateProfileBody } from './schemas/user.schema';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -48,5 +49,40 @@ export class UsersService {
 
   async validatePassword(user: User, plainPassword: string): Promise<boolean> {
     return bcrypt.compare(plainPassword, user.passwordHash);
+  }
+
+  async updateProfile(
+    userId: string,
+    data: UpdateProfileBody,
+  ): Promise<User | null> {
+    const user = await this.findById(userId);
+    if (!user) return null;
+
+    if (data.firstName !== undefined) {
+      user.firstName = data.firstName.trim();
+    }
+
+    if (data.lastName !== undefined) {
+      user.lastName = data.lastName.trim();
+    }
+
+    if (data.email !== undefined) {
+      const normalizedEmail = this.normalizeEmail(data.email);
+      if (normalizedEmail && normalizedEmail !== user.email) {
+        user.email = normalizedEmail;
+      }
+    }
+
+    try {
+      return await this.userRepository.save(user);
+    } catch (error) {
+      if (
+        (error as { code?: string }).code === '23505' ||
+        (error as { code?: string }).code === 'ER_DUP_ENTRY'
+      ) {
+        throw new ConflictException('Email already in use');
+      }
+      throw error;
+    }
   }
 }
