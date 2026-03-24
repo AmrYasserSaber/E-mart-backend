@@ -33,8 +33,8 @@ export const RefreshTokenBodySchema = Type.Object({
 export type RefreshTokenBody = Static<typeof RefreshTokenBodySchema>;
 
 export const AuthTokensResponseSchema = Type.Object({
-  access_token: Type.String({ description: 'JWT access token' }),
-  refresh_token: Type.String({ description: 'Opaque refresh token' }),
+  accessToken: Type.String({ description: 'JWT access token' }),
+  refreshToken: Type.String({ description: 'Opaque refresh token' }),
   user: UserPublicSchema,
 });
 

@@ -104,8 +104,8 @@ describe('AuthService', () => {
         email: mockUser.email,
         role: mockUser.role,
       });
-      expect(result).toHaveProperty('access_token', 'mock-access-token');
-      expect(result).toHaveProperty('refresh_token');
+      expect(result).toHaveProperty('accessToken', 'mock-access-token');
+      expect(result).toHaveProperty('refreshToken');
       expect(result).toHaveProperty('user');
       expect(result.user.email).toBe(mockUser.email);
     });
@@ -135,8 +135,8 @@ describe('AuthService', () => {
         mockUser,
         'password123',
       );
-      expect(result).toHaveProperty('access_token', 'mock-access-token');
-      expect(result).toHaveProperty('refresh_token');
+      expect(result).toHaveProperty('accessToken', 'mock-access-token');
+      expect(result).toHaveProperty('refreshToken');
       expect(result.user.email).toBe(mockUser.email);
     });
 
@@ -178,8 +178,8 @@ describe('AuthService', () => {
       const result = await authService.refresh('valid-refresh-token');
 
       expect(dataSource.transaction).toHaveBeenCalled();
-      expect(result).toHaveProperty('access_token');
-      expect(result).toHaveProperty('refresh_token');
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
       expect(result).toHaveProperty('user');
     });
 

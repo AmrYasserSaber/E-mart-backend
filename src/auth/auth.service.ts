@@ -83,8 +83,8 @@ export class AuthService {
     await this.refreshTokenRepository.save(refreshTokenEntity);
 
     return {
-      access_token: accessToken,
-      refresh_token: rawRefreshToken,
+      accessToken,
+      refreshToken: rawRefreshToken,
       user: toUserPublic(user),
     };
   }
@@ -168,8 +168,8 @@ export class AuthService {
       await refreshTokenRepo.save(newRefreshToken);
 
       return {
-        access_token: accessToken,
-        refresh_token: newRawRefreshToken,
+        accessToken,
+        refreshToken: newRawRefreshToken,
         user: toUserPublic(user),
       };
     });

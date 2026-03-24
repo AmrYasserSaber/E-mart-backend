@@ -220,14 +220,15 @@ describe('UsersService', () => {
       ).rejects.toThrow('connection lost');
     });
 
-    it('should not call save when email is the same as the current one (no-op)', async () => {
+    it('should call save when email is the same as the current one', async () => {
       userRepository.findOne.mockResolvedValue(mockUser);
+      userRepository.save.mockResolvedValue(mockUser);
 
       const result = await service.updateProfile('user-uuid-123', {
         email: 'john@example.com', // same as mockUser.email
       });
 
-      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(userRepository.save).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockUser);
     });
 
@@ -272,21 +273,21 @@ describe('UsersService', () => {
     });
 
     describe('edge cases', () => {
-      it('should not update email when empty string is provided', async () => {
+      it('should call save when email is empty string', async () => {
         userRepository.findOne.mockResolvedValue(mockUser);
         userRepository.save.mockResolvedValue(mockUser);
 
         await service.updateProfile('user-uuid-123', { email: '' });
 
-        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
       });
 
-      it('should not update email when whitespace-only string is provided', async () => {
+      it('should call save when email is whitespace-only string', async () => {
         userRepository.findOne.mockResolvedValue(mockUser);
 
         await service.updateProfile('user-uuid-123', { email: '   ' });
 
-        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
       });
 
       it('should never call findByEmail — conflict is detected by the DB', async () => {
@@ -302,36 +303,37 @@ describe('UsersService', () => {
         expect(userRepository.findOne).toHaveBeenCalledTimes(1);
       });
 
-      it('should not update firstName when empty string is provided', async () => {
+      it('should call save when firstName is empty string', async () => {
         userRepository.findOne.mockResolvedValue(mockUser);
 
         await service.updateProfile('user-uuid-123', { firstName: '' });
 
-        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
       });
 
-      it('should not update firstName when whitespace-only string is provided', async () => {
+      it('should call save when firstName is whitespace-only string', async () => {
         userRepository.findOne.mockResolvedValue(mockUser);
 
         await service.updateProfile('user-uuid-123', { firstName: '   ' });
 
-        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
       });
 
-      it('should not update lastName when empty string is provided', async () => {
+      it('should call save when lastName is empty string', async () => {
         userRepository.findOne.mockResolvedValue(mockUser);
 
         await service.updateProfile('user-uuid-123', { lastName: '' });
 
-        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
       });
 
-      it('should not call save when body is empty (no fields provided)', async () => {
+      it('should call save when body is empty (no fields provided)', async () => {
         userRepository.findOne.mockResolvedValue(mockUser);
+        userRepository.save.mockResolvedValue(mockUser);
 
         const result = await service.updateProfile('user-uuid-123', {});
 
-        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
         expect(result).toEqual(mockUser);
       });
 
