@@ -1,12 +1,5 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 
-/**
- * Placeholder JWT auth guard.
- * Replace with real JWT verification (e.g. passport-jwt) when wiring auth.
- */
 @Injectable()
-export class JwtAuthGuard implements CanActivate {
-  canActivate(_context: ExecutionContext): boolean | Promise<boolean> {
-    return true;
-  }
-}
+export class JwtAuthGuard extends AuthGuard('jwt') {}

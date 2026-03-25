@@ -11,4 +11,9 @@ export const env = cleanEnv(process.env, {
   DB_PASS: str({ default: 'postgres' }),
   DB_NAME: str({ default: 'emart' }),
   DB_SYNC: bool({ default: false }),
+
+  // JWT
+  JWT_SECRET: str({ devDefault: 'dev-secret-change-in-production' }),
+  JWT_ACCESS_EXPIRES_IN: str({ devDefault: '15m' }),
+  JWT_REFRESH_EXPIRES_IN: str({ devDefault: '7d' }),
 });

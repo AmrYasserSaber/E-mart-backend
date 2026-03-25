@@ -4,6 +4,9 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { configureNestJsTypebox } from 'nestjs-typebox';
 import { env } from './config/env';
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('MainModule');
 
 configureNestJsTypebox({
   patchSwagger: true,
@@ -17,11 +20,17 @@ async function bootstrap() {
     .setTitle('E-mart API')
     .setDescription('API documentation')
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('swagger', app, document);
 
   await app.listen(env.PORT);
+
+  logger.log(`App is running on http://localhost:${env.PORT}`);
+  logger.log(
+    `API documentation is available at http://localhost:${env.PORT}/swagger`,
+  );
 }
 void bootstrap();
