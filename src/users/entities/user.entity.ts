@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { Role } from '../../common/enums/role.enum';
 
@@ -28,6 +29,21 @@ export class User {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @Column({ default: true })
+  active!: boolean;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerifiedAt!: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  emailVerificationCodeHash!: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerificationExpiresAt!: Date | null;
 }
 
 export interface UserPublic {

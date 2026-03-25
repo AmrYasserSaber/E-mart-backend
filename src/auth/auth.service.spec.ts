@@ -2,9 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { createHash } from 'crypto';
+import {
+  ConflictException,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
+import { RESEND_VERIFICATION_MESSAGE } from './schemas/auth.schemas';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { MailService } from '../mail/mail.service';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../common/enums/role.enum';
@@ -12,6 +19,7 @@ import { Role } from '../common/enums/role.enum';
 describe('AuthService', () => {
   let authService: AuthService;
   let usersService: jest.Mocked<UsersService>;
+  let mailService: jest.Mocked<Pick<MailService, 'sendConfirmationEmail'>>;
   let jwtService: jest.Mocked<JwtService>;
   let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
   let dataSource: jest.Mocked<DataSource>;
@@ -24,12 +32,22 @@ describe('AuthService', () => {
     passwordHash: 'hashed-password',
     role: Role.USER,
     createdAt: new Date('2024-01-01'),
+    active: true,
+    updatedAt: new Date('2024-01-01'),
+    emailVerifiedAt: null,
+    emailVerificationCodeHash: null,
+    emailVerificationExpiresAt: null,
+  };
+
+  const mockVerifiedUser: User = {
+    ...mockUser,
+    emailVerifiedAt: new Date('2024-01-02T00:00:00.000Z'),
   };
 
   const mockRefreshToken: RefreshToken = {
     id: 'token-uuid-123',
-    userId: mockUser.id,
-    user: mockUser,
+    userId: mockVerifiedUser.id,
+    user: mockVerifiedUser,
     tokenHash: 'hashed-refresh-token',
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     createdAt: new Date(),
@@ -40,7 +58,13 @@ describe('AuthService', () => {
       findByEmail: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
+      setEmailVerificationCode: jest.fn().mockResolvedValue(undefined),
+      markEmailAsVerified: jest.fn(),
       validatePassword: jest.fn(),
+    };
+
+    const mockMailService = {
+      sendConfirmationEmail: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockJwtService = {
@@ -62,6 +86,7 @@ describe('AuthService', () => {
       providers: [
         AuthService,
         { provide: UsersService, useValue: mockUsersService },
+        { provide: MailService, useValue: mockMailService },
         { provide: JwtService, useValue: mockJwtService },
         {
           provide: getRepositoryToken(RefreshToken),
@@ -73,6 +98,7 @@ describe('AuthService', () => {
 
     authService = module.get<AuthService>(AuthService);
     usersService = module.get(UsersService);
+    mailService = module.get(MailService);
     jwtService = module.get(JwtService);
     refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
     dataSource = module.get(DataSource);
@@ -108,6 +134,22 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('refreshToken');
       expect(result).toHaveProperty('user');
       expect(result.user.email).toBe(mockUser.email);
+      expect(usersService.setEmailVerificationCode).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.any(String),
+        expect.any(Date),
+      );
+      expect(mailService.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+      const mailCall = mailService.sendConfirmationEmail.mock.calls[0];
+      expect(mailCall[0]).toBe(mockUser.email);
+      const mailPayload = mailCall[1] as {
+        firstName: string;
+        lastName: string;
+        code: string;
+      };
+      expect(mailPayload.firstName).toBe(mockUser.firstName);
+      expect(mailPayload.lastName).toBe(mockUser.lastName);
+      expect(mailPayload.code).toMatch(/^\d{6}$/);
     });
 
     it('should throw ConflictException if email already exists', async () => {
@@ -118,12 +160,143 @@ describe('AuthService', () => {
       ).rejects.toThrow(ConflictException);
 
       expect(usersService.create).not.toHaveBeenCalled();
+      expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('verifyEmail', () => {
+    const future = new Date(Date.now() + 60_000);
+    const code = '123456';
+    const codeHash = createHash('sha256').update(code, 'utf8').digest('hex');
+
+    const userPendingVerification: User = {
+      ...mockUser,
+      emailVerifiedAt: null,
+      emailVerificationCodeHash: codeHash,
+      emailVerificationExpiresAt: future,
+    };
+
+    const userVerified: User = {
+      ...mockUser,
+      emailVerifiedAt: new Date('2024-06-01'),
+      emailVerificationCodeHash: null,
+      emailVerificationExpiresAt: null,
+    };
+
+    it('should verify email with valid code', async () => {
+      usersService.findByEmail.mockResolvedValue(userPendingVerification);
+      usersService.markEmailAsVerified.mockResolvedValue(userVerified);
+
+      const result = await authService.verifyEmail('john@example.com', code);
+
+      expect(usersService.markEmailAsVerified).toHaveBeenCalledWith(
+        mockUser.id,
+      );
+      expect(result.verified).toBe(true);
+      expect(result.user.email).toBe(mockUser.email);
+    });
+
+    it('should return verified when already verified (idempotent)', async () => {
+      usersService.findByEmail.mockResolvedValue(userVerified);
+
+      const result = await authService.verifyEmail(
+        'john@example.com',
+        '000000',
+      );
+
+      expect(usersService.markEmailAsVerified).not.toHaveBeenCalled();
+      expect(result.verified).toBe(true);
+    });
+
+    it('should reject unknown email', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        authService.verifyEmail('unknown@example.com', code),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(usersService.markEmailAsVerified).not.toHaveBeenCalled();
+    });
+
+    it('should reject wrong code', async () => {
+      usersService.findByEmail.mockResolvedValue(userPendingVerification);
+
+      await expect(
+        authService.verifyEmail('john@example.com', '999999'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(usersService.markEmailAsVerified).not.toHaveBeenCalled();
+    });
+
+    it('should reject expired code', async () => {
+      usersService.findByEmail.mockResolvedValue({
+        ...userPendingVerification,
+        emailVerificationExpiresAt: new Date(Date.now() - 60_000),
+      });
+
+      await expect(
+        authService.verifyEmail('john@example.com', code),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(usersService.markEmailAsVerified).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resendVerificationEmail', () => {
+    it('returns generic message when email is not registered', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+
+      const result =
+        await authService.resendVerificationEmail('nobody@example.com');
+
+      expect(result).toEqual({ message: RESEND_VERIFICATION_MESSAGE });
+      expect(usersService.setEmailVerificationCode).not.toHaveBeenCalled();
+      expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
+    });
+
+    it('throws when email is already verified', async () => {
+      usersService.findByEmail.mockResolvedValue(mockVerifiedUser);
+
+      await expect(
+        authService.resendVerificationEmail('john@example.com'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(usersService.setEmailVerificationCode).not.toHaveBeenCalled();
+      expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
+    });
+
+    it('issues new code and sends mail for unverified user', async () => {
+      const pending: User = {
+        ...mockUser,
+        emailVerifiedAt: null,
+        emailVerificationCodeHash: 'old-hash',
+        emailVerificationExpiresAt: new Date(Date.now() - 1000),
+      };
+      usersService.findByEmail.mockResolvedValue(pending);
+
+      const result =
+        await authService.resendVerificationEmail('john@example.com');
+
+      expect(result).toEqual({ message: RESEND_VERIFICATION_MESSAGE });
+      expect(usersService.setEmailVerificationCode).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.any(String),
+        expect.any(Date),
+      );
+      expect(mailService.sendConfirmationEmail).toHaveBeenCalledWith(
+        'john@example.com',
+        expect.objectContaining({
+          firstName: pending.firstName,
+          lastName: pending.lastName,
+          code: expect.stringMatching(/^\d{6}$/),
+        }),
+      );
     });
   });
 
   describe('login', () => {
     it('should login user and return tokens', async () => {
-      usersService.findByEmail.mockResolvedValue(mockUser);
+      usersService.findByEmail.mockResolvedValue(mockVerifiedUser);
       usersService.validatePassword.mockResolvedValue(true);
       refreshTokenRepository.create.mockReturnValue(mockRefreshToken);
       refreshTokenRepository.save.mockResolvedValue(mockRefreshToken);
@@ -132,12 +305,23 @@ describe('AuthService', () => {
 
       expect(usersService.findByEmail).toHaveBeenCalledWith('john@example.com');
       expect(usersService.validatePassword).toHaveBeenCalledWith(
-        mockUser,
+        mockVerifiedUser,
         'password123',
       );
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
       expect(result).toHaveProperty('refreshToken');
-      expect(result.user.email).toBe(mockUser.email);
+      expect(result).not.toHaveProperty('user');
+    });
+
+    it('should reject login when email is not verified', async () => {
+      usersService.findByEmail.mockResolvedValue(mockUser);
+      usersService.validatePassword.mockResolvedValue(true);
+
+      await expect(
+        authService.login('john@example.com', 'password123'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(refreshTokenRepository.save).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
@@ -151,7 +335,7 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException if password is invalid', async () => {
-      usersService.findByEmail.mockResolvedValue(mockUser);
+      usersService.findByEmail.mockResolvedValue(mockVerifiedUser);
       usersService.validatePassword.mockResolvedValue(false);
 
       await expect(
@@ -169,11 +353,12 @@ describe('AuthService', () => {
         save: jest.fn().mockResolvedValue(mockRefreshToken),
       };
 
-      dataSource.transaction.mockImplementation(async (callback: any) => {
-        return callback({
-          getRepository: () => mockRefreshTokenRepo,
-        });
-      });
+      dataSource.transaction.mockImplementation(
+        (callback: (m: unknown) => unknown) =>
+          callback({
+            getRepository: () => mockRefreshTokenRepo,
+          }),
+      );
 
       const result = await authService.refresh('valid-refresh-token');
 
@@ -183,16 +368,42 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('user');
     });
 
+    it('should reject refresh when email is not verified', async () => {
+      const unverifiedRefresh = {
+        ...mockRefreshToken,
+        user: mockUser,
+      };
+
+      const mockRefreshTokenRepo = {
+        findOne: jest.fn().mockResolvedValue(unverifiedRefresh),
+        delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+
+      dataSource.transaction.mockImplementation(
+        (callback: (m: unknown) => unknown) =>
+          callback({
+            getRepository: () => mockRefreshTokenRepo,
+          }),
+      );
+
+      await expect(authService.refresh('valid-refresh-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(mockRefreshTokenRepo.delete).not.toHaveBeenCalled();
+    });
+
     it('should throw UnauthorizedException for invalid refresh token', async () => {
       const mockRefreshTokenRepo = {
         findOne: jest.fn().mockResolvedValue(null),
       };
 
-      dataSource.transaction.mockImplementation(async (callback: any) => {
-        return callback({
-          getRepository: () => mockRefreshTokenRepo,
-        });
-      });
+      dataSource.transaction.mockImplementation(
+        (callback: (m: unknown) => unknown) =>
+          callback({
+            getRepository: () => mockRefreshTokenRepo,
+          }),
+      );
 
       await expect(authService.refresh('invalid-token')).rejects.toThrow(
         UnauthorizedException,
@@ -210,11 +421,12 @@ describe('AuthService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 1 }),
       };
 
-      dataSource.transaction.mockImplementation(async (callback: any) => {
-        return callback({
-          getRepository: () => mockRefreshTokenRepo,
-        });
-      });
+      dataSource.transaction.mockImplementation(
+        (callback: (m: unknown) => unknown) =>
+          callback({
+            getRepository: () => mockRefreshTokenRepo,
+          }),
+      );
 
       await expect(authService.refresh('expired-token')).rejects.toThrow(
         UnauthorizedException,

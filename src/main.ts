@@ -1,9 +1,13 @@
 import 'dotenv/config';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { configureNestJsTypebox } from 'nestjs-typebox';
 import { env } from './config/env';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('MainModule');
@@ -15,6 +19,11 @@ configureNestJsTypebox({
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(helmet());
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('E-mart API')
@@ -25,6 +34,16 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('swagger', app, document);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
   await app.listen(env.PORT);
 

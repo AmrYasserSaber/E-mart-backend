@@ -1,11 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule, JwtService } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
-import { Repository, DataSource } from 'typeorm';
+import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuthModule } from '../src/auth/auth.module';
 import { UsersModule } from '../src/users/users.module';
@@ -18,8 +16,6 @@ describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   let userRepository: Repository<User>;
   let refreshTokenRepository: Repository<RefreshToken>;
-  let jwtService: JwtService;
-  let dataSource: DataSource;
 
   beforeAll(async () => {
     configureNestJsTypebox({
@@ -54,8 +50,6 @@ describe('Auth (e2e)', () => {
     refreshTokenRepository = moduleFixture.get<Repository<RefreshToken>>(
       getRepositoryToken(RefreshToken),
     );
-    jwtService = moduleFixture.get<JwtService>(JwtService);
-    dataSource = moduleFixture.get<DataSource>(DataSource);
   });
 
   afterAll(async () => {

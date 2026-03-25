@@ -2,18 +2,26 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, LessThan } from 'typeorm';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import { UsersService } from '../users/users.service';
+import { MailService } from '../mail/mail.service';
 import { User, UserPublic, toUserPublic } from '../users/entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { env } from '../config/env';
-import type { AuthTokensResponse } from './schemas/auth.schemas';
+import {
+  RESEND_VERIFICATION_MESSAGE,
+  type AuthTokensResponse,
+  type AuthTokensOnlyResponse,
+  type VerifyEmailResponse,
+  type ResendVerificationResponse,
+} from './schemas/auth.schemas';
 import type { JwtPayload } from './types/jwt-payload.interface';
 
 @Injectable()
@@ -22,6 +30,7 @@ export class AuthService {
 
   constructor(
     private readonly usersService: UsersService,
+    private readonly mailService: MailService,
     private readonly jwtService: JwtService,
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
@@ -30,6 +39,35 @@ export class AuthService {
 
   private hashRefreshToken(rawToken: string): string {
     return createHash('sha256').update(rawToken).digest('hex');
+  }
+
+  private generateEmailVerificationCode(): string {
+    return String(randomInt(0, 1_000_000)).padStart(6, '0');
+  }
+
+  private hashEmailVerificationCode(code: string): string {
+    return createHash('sha256').update(code, 'utf8').digest('hex');
+  }
+
+  private requireVerifiedEmail(user: User): void {
+    if (!user.emailVerifiedAt) {
+      throw new UnauthorizedException(
+        'Please verify your email before signing in.',
+      );
+    }
+  }
+
+  private compareEmailVerificationHashes(a: string, b: string): boolean {
+    try {
+      const bufA = Buffer.from(a, 'hex');
+      const bufB = Buffer.from(b, 'hex');
+      if (bufA.length !== bufB.length) {
+        return false;
+      }
+      return timingSafeEqual(bufA, bufB);
+    } catch {
+      return false;
+    }
   }
 
   private generateRefreshToken(): string {
@@ -63,7 +101,18 @@ export class AuthService {
     }
   }
 
-  private async issueTokens(user: User): Promise<AuthTokensResponse> {
+  private async issueTokens(
+    user: User,
+    includeUser: true,
+  ): Promise<AuthTokensResponse>;
+  private async issueTokens(
+    user: User,
+    includeUser: false,
+  ): Promise<AuthTokensOnlyResponse>;
+  private async issueTokens(
+    user: User,
+    includeUser: boolean,
+  ): Promise<AuthTokensResponse | AuthTokensOnlyResponse> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -82,10 +131,17 @@ export class AuthService {
     });
     await this.refreshTokenRepository.save(refreshTokenEntity);
 
+    if (includeUser) {
+      return {
+        accessToken,
+        refreshToken: rawRefreshToken,
+        user: toUserPublic(user),
+      };
+    }
+
     return {
       accessToken,
       refreshToken: rawRefreshToken,
-      user: toUserPublic(user),
     };
   }
 
@@ -106,10 +162,105 @@ export class AuthService {
       email,
       password,
     );
-    return this.issueTokens(user);
+
+    const code = this.generateEmailVerificationCode();
+    const codeHash = this.hashEmailVerificationCode(code);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await this.usersService.setEmailVerificationCode(
+      user.id,
+      codeHash,
+      expiresAt,
+    );
+
+    try {
+      await this.mailService.sendConfirmationEmail(user.email, {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        code,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send confirmation email to ${user.email}`,
+        err instanceof Error ? err.stack : err,
+      );
+    }
+
+    return this.issueTokens(user, true);
   }
 
-  async login(email: string, password: string): Promise<AuthTokensResponse> {
+  async verifyEmail(email: string, code: string): Promise<VerifyEmailResponse> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    if (user.emailVerifiedAt) {
+      return { verified: true, user: toUserPublic(user) };
+    }
+
+    if (!user.emailVerificationCodeHash || !user.emailVerificationExpiresAt) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    if (user.emailVerificationExpiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const submittedHash = this.hashEmailVerificationCode(code.trim());
+    if (
+      !this.compareEmailVerificationHashes(
+        submittedHash,
+        user.emailVerificationCodeHash,
+      )
+    ) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const updated = await this.usersService.markEmailAsVerified(user.id);
+    return { verified: true, user: toUserPublic(updated) };
+  }
+
+  async resendVerificationEmail(
+    email: string,
+  ): Promise<ResendVerificationResponse> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      return { message: RESEND_VERIFICATION_MESSAGE };
+    }
+
+    if (user.emailVerifiedAt) {
+      throw new ConflictException('Email is already verified');
+    }
+
+    const code = this.generateEmailVerificationCode();
+    const codeHash = this.hashEmailVerificationCode(code);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await this.usersService.setEmailVerificationCode(
+      user.id,
+      codeHash,
+      expiresAt,
+    );
+
+    try {
+      await this.mailService.sendConfirmationEmail(user.email, {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        code,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send confirmation email to ${user.email}`,
+        err instanceof Error ? err.stack : err,
+      );
+    }
+
+    return { message: RESEND_VERIFICATION_MESSAGE };
+  }
+
+  async login(
+    email: string,
+    password: string,
+  ): Promise<AuthTokensOnlyResponse> {
     const user = await this.usersService.findByEmail(email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -120,7 +271,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.issueTokens(user);
+    this.requireVerifiedEmail(user);
+
+    return this.issueTokens(user, false);
   }
 
   async refresh(rawRefreshToken: string): Promise<AuthTokensResponse> {
@@ -143,12 +296,15 @@ export class AuthService {
         throw new UnauthorizedException('Refresh token expired');
       }
 
-      await refreshTokenRepo.delete({ id: existingToken.id });
-
       const user = existingToken.user;
       if (!user) {
         throw new UnauthorizedException('User not found');
       }
+
+      this.requireVerifiedEmail(user);
+
+      await refreshTokenRepo.delete({ id: existingToken.id });
+
       const payload: JwtPayload = {
         sub: user.id,
         email: user.email,

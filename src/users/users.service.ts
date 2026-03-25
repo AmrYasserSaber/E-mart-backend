@@ -1,4 +1,8 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -36,6 +40,48 @@ export class UsersService {
       role,
     });
     return this.userRepository.save(user);
+  }
+
+  async setEmailVerificationCode(
+    userId: string,
+    codeHash: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    const result = await this.userRepository.update(
+      { id: userId },
+      {
+        emailVerificationCodeHash: codeHash,
+        emailVerificationExpiresAt: expiresAt,
+      },
+    );
+    if (result.affected === 0) {
+      throw new InternalServerErrorException(
+        `setEmailVerificationCode: no user updated for id=${userId}`,
+      );
+    }
+  }
+
+  async markEmailAsVerified(userId: string): Promise<User> {
+    const result = await this.userRepository.update(
+      { id: userId },
+      {
+        emailVerifiedAt: new Date(),
+        emailVerificationCodeHash: null,
+        emailVerificationExpiresAt: null,
+      },
+    );
+    if (result.affected === 0) {
+      throw new InternalServerErrorException(
+        `markEmailAsVerified: no user updated for id=${userId}`,
+      );
+    }
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new InternalServerErrorException(
+        `markEmailAsVerified: user missing after update id=${userId}`,
+      );
+    }
+    return user;
   }
 
   async findByEmail(email: string): Promise<User | null> {

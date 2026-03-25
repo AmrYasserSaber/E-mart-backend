@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { User, UserPublic } from './entities/user.entity';
@@ -17,6 +18,11 @@ describe('UsersController', () => {
     passwordHash: 'hashed-password',
     role: Role.USER,
     createdAt: new Date('2024-01-01'),
+    active: true,
+    updatedAt: new Date('2024-01-01'),
+    emailVerifiedAt: null,
+    emailVerificationCodeHash: null,
+    emailVerificationExpiresAt: null,
   };
 
   const mockCurrentUser: UserPublic = {
@@ -36,7 +42,13 @@ describe('UsersController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [{ provide: UsersService, useValue: mockUsersService }],
+      providers: [
+        { provide: UsersService, useValue: mockUsersService },
+        {
+          provide: ConfigService,
+          useValue: { getOrThrow: jest.fn().mockReturnValue('test-secret') },
+        },
+      ],
     }).compile();
 
     controller = module.get<UsersController>(UsersController);

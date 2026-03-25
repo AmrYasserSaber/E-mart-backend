@@ -1,9 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { Role } from '../common/enums/role.enum';
 import type { UserPublic } from '../users/entities/user.entity';
-import type { AuthTokensResponse } from './schemas/auth.schemas';
+import type {
+  AuthTokensResponse,
+  AuthTokensOnlyResponse,
+} from './schemas/auth.schemas';
+import { RESEND_VERIFICATION_MESSAGE } from './schemas/auth.schemas';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -19,22 +24,36 @@ describe('AuthController', () => {
   };
 
   const mockAuthTokensResponse: AuthTokensResponse = {
-    access_token: 'mock-access-token',
-    refresh_token: 'mock-refresh-token',
+    accessToken: 'mock-access-token',
+    refreshToken: 'mock-refresh-token',
     user: mockUserPublic,
+  };
+
+  const mockLoginTokensResponse: AuthTokensOnlyResponse = {
+    accessToken: 'mock-access-token',
+    refreshToken: 'mock-refresh-token',
   };
 
   beforeEach(async () => {
     const mockAuthService = {
       register: jest.fn(),
       login: jest.fn(),
+      verifyEmail: jest.fn(),
+      resendVerificationEmail: jest.fn(),
       refresh: jest.fn(),
       logout: jest.fn(),
+      validateUserFromJwt: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: mockAuthService }],
+      providers: [
+        { provide: AuthService, useValue: mockAuthService },
+        {
+          provide: ConfigService,
+          useValue: { getOrThrow: jest.fn().mockReturnValue('test-secret') },
+        },
+      ],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
@@ -64,9 +83,41 @@ describe('AuthController', () => {
     });
   });
 
+  describe('verifyEmail', () => {
+    it('should call authService.verifyEmail with correct arguments', async () => {
+      const verifyResponse = { verified: true as const, user: mockUserPublic };
+      authService.verifyEmail.mockResolvedValue(verifyResponse);
+
+      const body = { email: 'john@example.com', code: '123456' };
+
+      const result = await controller.verifyEmail(body);
+
+      expect(authService.verifyEmail).toHaveBeenCalledWith(
+        body.email,
+        body.code,
+      );
+      expect(result).toEqual(verifyResponse);
+    });
+  });
+
+  describe('resendVerification', () => {
+    it('should call authService.resendVerificationEmail with email', async () => {
+      const res = { message: RESEND_VERIFICATION_MESSAGE };
+      authService.resendVerificationEmail.mockResolvedValue(res);
+
+      const body = { email: 'john@example.com' };
+      const result = await controller.resendVerification(body);
+
+      expect(authService.resendVerificationEmail).toHaveBeenCalledWith(
+        body.email,
+      );
+      expect(result).toEqual(res);
+    });
+  });
+
   describe('login', () => {
     it('should call authService.login with correct arguments', async () => {
-      authService.login.mockResolvedValue(mockAuthTokensResponse);
+      authService.login.mockResolvedValue(mockLoginTokensResponse);
 
       const body = {
         email: 'john@example.com',
@@ -76,7 +127,7 @@ describe('AuthController', () => {
       const result = await controller.login(body);
 
       expect(authService.login).toHaveBeenCalledWith(body.email, body.password);
-      expect(result).toEqual(mockAuthTokensResponse);
+      expect(result).toEqual(mockLoginTokensResponse);
     });
   });
 
@@ -107,9 +158,20 @@ describe('AuthController', () => {
   });
 
   describe('me', () => {
-    it('should return the current user from decorator', () => {
-      const result = controller.me(mockUserPublic);
+    it('should return profile from validateUserFromJwt', async () => {
+      authService.validateUserFromJwt.mockResolvedValue(mockUserPublic);
 
+      const req = {
+        user: {
+          sub: mockUserPublic.id,
+          email: mockUserPublic.email,
+          role: mockUserPublic.role,
+        },
+      };
+
+      const result = await controller.me(req as never);
+
+      expect(authService.validateUserFromJwt).toHaveBeenCalledWith(req.user);
       expect(result).toEqual(mockUserPublic);
     });
   });

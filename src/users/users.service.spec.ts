@@ -23,6 +23,11 @@ describe('UsersService', () => {
       passwordHash: 'hashed-password',
       role: Role.USER,
       createdAt: new Date('2024-01-01'),
+      active: true,
+      updatedAt: new Date('2024-01-01'),
+      emailVerifiedAt: null,
+      emailVerificationCodeHash: null,
+      emailVerificationExpiresAt: null,
     };
 
     const mockUserRepository = {
@@ -251,7 +256,10 @@ describe('UsersService', () => {
       await service.updateProfile('user-uuid-123', { firstName: 'Jane' });
 
       expect(userRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({ firstName: 'Jane', lastName: mockUser.lastName }),
+        expect.objectContaining({
+          firstName: 'Jane',
+          lastName: mockUser.lastName,
+        }),
       );
     });
 

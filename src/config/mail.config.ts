@@ -1,7 +1,10 @@
+import { env } from './env';
+
 export const mailConfig = () => ({
-  // Example:
-  // host: process.env.MAIL_HOST,
-  // port: Number(process.env.MAIL_PORT ?? 587),
-  // user: process.env.MAIL_USER,
-  // pass: process.env.MAIL_PASS,
+  host: env.MAIL_HOST,
+  port: env.MAIL_PORT,
+  secure: env.MAIL_SECURE,
+  user: env.MAIL_USER,
+  pass: env.MAIL_PASS,
+  from: env.MAIL_FROM,
 });
