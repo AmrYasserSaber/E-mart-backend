@@ -55,6 +55,12 @@ export interface UserPublic {
   createdAt: string;
 }
 
+/**
+ * Convert a User entity into its public-facing representation.
+ *
+ * @param user - The User entity to convert
+ * @returns A `UserPublic` object containing public user fields; `createdAt` is formatted as an ISO 8601 string
+ */
 export function toUserPublic(user: User): UserPublic {
   return {
     id: user.id,

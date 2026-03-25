@@ -62,6 +62,13 @@ describe('Users (e2e)', () => {
     await userRepository.createQueryBuilder().delete().execute();
   });
 
+  /**
+   * Creates and persists a user with the given email and role, then logs in to obtain an access token.
+   *
+   * @param email - Email address for the created user
+   * @param role - Role assigned to the user; when `Role.ADMIN` the user's `firstName` will be set to "Admin", otherwise "Regular"
+   * @returns An object containing the persisted `user` entity and the `accessToken` returned by the authentication endpoint
+   */
   async function createUser(
     email: string,
     role: Role = Role.USER,

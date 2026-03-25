@@ -17,6 +17,11 @@ configureNestJsTypebox({
   setFormats: true,
 });
 
+/**
+ * Bootstraps and starts the NestJS application, configuring security, CORS, validation, global filters/interceptors, and Swagger.
+ *
+ * Sets up Helmet security headers, enables CORS (allowing any origin and credentials), registers Swagger at `/swagger` with bearer auth, applies a ValidationPipe that whitelists and transforms inputs and forbids unknown properties, installs global HTTP exception filtering and a response interceptor, then listens on `env.PORT` and logs the application and documentation URLs.
+ */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(helmet());
