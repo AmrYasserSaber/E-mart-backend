@@ -1,4 +1,5 @@
 export class UpdateProfileDto {
-  name?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
 }

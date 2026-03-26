@@ -4,7 +4,7 @@ import { UpdateCartDto } from './dto/update-cart.dto';
 
 @Injectable()
 export class CartService {
-  create(createCartDto: CreateCartDto) {
+  create(_createCartDto: CreateCartDto) {
     return 'This action adds a new cart';
   }
 
@@ -16,7 +16,7 @@ export class CartService {
     return `This action returns a #${id} cart`;
   }
 
-  update(id: number, updateCartDto: UpdateCartDto) {
+  update(id: number, _updateCartDto: UpdateCartDto) {
     return `This action updates a #${id} cart`;
   }
 

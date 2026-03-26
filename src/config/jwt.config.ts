@@ -1,5 +1,8 @@
+import { env } from './env';
+
 export const jwtConfig = () => ({
-  // Example:
-  // secret: process.env.JWT_SECRET,
-  // signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '1d' },
+  secret: env.JWT_SECRET,
+  signOptions: {
+    expiresIn: env.JWT_EXPIRES_IN as unknown as number,
+  },
 });

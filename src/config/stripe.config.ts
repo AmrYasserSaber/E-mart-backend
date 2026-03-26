@@ -1,4 +1,5 @@
+import { env } from './env';
+
 export const stripeConfig = () => ({
-  // Example:
-  // apiKey: process.env.STRIPE_SECRET_KEY,
+  apiKey: env.STRIPE_SECRET_KEY,
 });

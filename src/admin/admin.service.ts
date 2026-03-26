@@ -1,26 +1,114 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAdminDto } from './dto/create-admin.dto';
-import { UpdateAdminDto } from './dto/update-admin.dto';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ILike, Repository } from 'typeorm';
+import {
+  User,
+  toUserPublic,
+  type UserPublic,
+} from '../users/entities/user.entity';
+import { getPagination } from '../common/utils/pagination.utils';
+import { MailService } from '../mail/mail.service';
+import { Role } from '../common/enums/role.enum';
+import {
+  type ListUsersQuery,
+  type ManageUserBody,
+} from './schemas/admin.schemas';
 
 @Injectable()
 export class AdminService {
-  create(createAdminDto: CreateAdminDto) {
-    return 'This action adds a new admin';
+  private readonly logger = new Logger(AdminService.name);
+
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly mailService: MailService,
+  ) {}
+
+  async listUsers(query: ListUsersQuery) {
+    const { page, limit, skip } = getPagination(query);
+    const where: Record<string, unknown> = {};
+
+    if (query.search) {
+      where.email = ILike(`%${query.search}%`);
+    }
+    if (query.role) {
+      where.role = query.role;
+    }
+    if (query.active === true || query.active === 'true') {
+      where.active = true;
+    } else if (query.active === false || query.active === 'false') {
+      where.active = false;
+    }
+
+    const [items, total] = await this.userRepository.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    const sanitizedItems: UserPublic[] = items.map(toUserPublic);
+
+    return {
+      items: sanitizedItems,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  findAll() {
-    return `This action returns all admin`;
+  async getUser(id: string) {
+    const user = await this.getUserEntity(id);
+    return toUserPublic(user);
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} admin`;
+  async manageUser(id: string, dto: ManageUserBody) {
+    const user = await this.getUserEntity(id);
+
+    const roleChanged = dto.role !== undefined && dto.role !== user.role;
+    const activeChanged =
+      dto.active !== undefined && typeof dto.active === 'boolean'
+        ? dto.active !== user.active
+        : false;
+
+    if (!roleChanged && !activeChanged) {
+      return toUserPublic(user);
+    }
+
+    if (roleChanged) {
+      user.role = dto.role;
+    }
+    if (activeChanged) {
+      user.active = dto.active as boolean;
+    }
+
+    const saved = await this.userRepository.save(user);
+
+    if (saved.email) {
+      try {
+        await this.mailService.sendAdminChangeNotice(saved.email, {
+          firstName: saved.firstName ?? saved.email,
+          lastName: saved.lastName ?? '',
+          role: saved.role ?? Role.USER,
+          active: saved.active,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send admin change notice to ${saved.email} (userId=${saved.id})`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+    }
+
+    return toUserPublic(saved);
   }
 
-  update(id: number, updateAdminDto: UpdateAdminDto) {
-    return `This action updates a #${id} admin`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} admin`;
+  private async getUserEntity(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 }

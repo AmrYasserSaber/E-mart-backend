@@ -1,42 +1,76 @@
 import {
   Controller,
   Get,
-  Post,
-  Body,
   Patch,
   Param,
-  Delete,
+  Body,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Validate } from 'nestjs-typebox';
 import { AdminService } from './admin.service';
-import { CreateAdminDto } from './dto/create-admin.dto';
-import { UpdateAdminDto } from './dto/update-admin.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
+import { ValidateQueryParams } from '../common/decorators/validate-query-params.decorator';
+import {
+  ListUsersQuerySchema,
+  type ListUsersQuery,
+  ListUsersResponseSchema,
+  ManageUserBodySchema,
+  type ManageUserBody,
+  ManageUserResponseSchema,
+} from './schemas/admin.schemas';
+import { UserPublicSchema } from '../users/schemas/user.schema';
 
+@ApiTags('admin')
+@ApiBearerAuth()
 @Controller('admin')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  @Post()
-  create(@Body() createAdminDto: CreateAdminDto) {
-    return this.adminService.create(createAdminDto);
+  @Get('users')
+  @ValidateQueryParams(ListUsersQuerySchema)
+  @Validate({
+    response: { schema: ListUsersResponseSchema, stripUnknownProps: true },
+  })
+  listUsers(@Query() query: ListUsersQuery) {
+    return this.adminService.listUsers(query);
   }
 
-  @Get()
-  findAll() {
-    return this.adminService.findAll();
+  @Get('users/:id')
+  @ApiOperation({ summary: 'Get single user by id' })
+  @ApiParam({ name: 'id', type: String })
+  getUser(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.adminService.getUser(id);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.adminService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateAdminDto: UpdateAdminDto) {
-    return this.adminService.update(+id, updateAdminDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.adminService.remove(+id);
+  @Patch('users/:id')
+  @ApiOperation({ summary: 'Manage user role/active status' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({
+    description: 'Updated user account',
+    schema: UserPublicSchema,
+  })
+  @Validate({
+    request: [{ type: 'body', schema: ManageUserBodySchema }],
+    response: { schema: ManageUserResponseSchema, stripUnknownProps: true },
+  })
+  manageUser(
+    @Body() dto: ManageUserBody,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.adminService.manageUser(id, dto);
   }
 }
