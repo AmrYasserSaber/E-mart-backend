@@ -13,7 +13,6 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
-  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { Validate } from 'nestjs-typebox';
@@ -42,16 +41,6 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('users')
-  @ApiOperation({ summary: 'List users for admin management' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({
-    name: 'role',
-    required: false,
-    enum: Role,
-  })
-  @ApiQuery({ name: 'active', required: false, type: Boolean })
   @ValidateQueryParams(ListUsersQuerySchema)
   @Validate({
     response: { schema: ListUsersResponseSchema, stripUnknownProps: true },
