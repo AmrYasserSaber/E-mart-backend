@@ -158,20 +158,13 @@ describe('AuthController', () => {
   });
 
   describe('me', () => {
-    it('should return profile from validateUserFromJwt', async () => {
-      authService.validateUserFromJwt.mockResolvedValue(mockUserPublic);
-
+    it('should return req.user directly', () => {
       const req = {
-        user: {
-          sub: mockUserPublic.id,
-          email: mockUserPublic.email,
-          role: mockUserPublic.role,
-        },
+        user: mockUserPublic,
       };
 
-      const result = await controller.me(req as never);
+      const result = controller.me(req as never);
 
-      expect(authService.validateUserFromJwt).toHaveBeenCalledWith(req.user);
       expect(result).toEqual(mockUserPublic);
     });
   });

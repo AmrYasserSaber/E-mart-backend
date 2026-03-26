@@ -39,7 +39,14 @@ export class UsersService {
       passwordHash,
       role,
     });
-    return this.userRepository.save(user);
+    try {
+      return await this.userRepository.save(user);
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505') {
+        throw new ConflictException('Email already exists');
+      }
+      throw error;
+    }
   }
 
   async setEmailVerificationCode(

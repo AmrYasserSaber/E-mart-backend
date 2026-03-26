@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
@@ -10,6 +10,8 @@ import { Role } from '../common/enums/role.enum';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -67,12 +69,19 @@ export class AdminService {
     const saved = await this.userRepository.save(user);
 
     if (saved.email) {
-      await this.mailService.sendAdminChangeNotice(saved.email, {
-        firstName: saved.firstName ?? saved.email,
-        lastName: saved.lastName ?? '',
-        role: saved.role ?? Role.USER,
-        active: saved.active,
-      });
+      try {
+        await this.mailService.sendAdminChangeNotice(saved.email, {
+          firstName: saved.firstName ?? saved.email,
+          lastName: saved.lastName ?? '',
+          role: saved.role ?? Role.USER,
+          active: saved.active,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send admin change notice to ${saved.email} (userId=${saved.id})`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
     }
 
     return saved;

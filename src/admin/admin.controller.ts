@@ -24,6 +24,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { ListUsersDto } from './dto/list-users.dto';
 import { ManageUserDto } from './dto/manage-user.dto';
 import { Role } from '../common/enums/role.enum';
+import { User } from '../users/entities/user.entity';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -58,21 +59,10 @@ export class AdminController {
   @Patch('users/:id')
   @ApiOperation({ summary: 'Manage user role/active status' })
   @ApiParam({ name: 'id', type: String })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        role: {
-          type: 'string',
-          enum: [Role.USER, Role.SELLER, Role.ADMIN],
-        },
-        active: { type: 'boolean' },
-      },
-      additionalProperties: false,
-    },
-  })
+  @ApiBody({ type: ManageUserDto })
   @ApiOkResponse({
     description: 'Updated user account',
+    type: User,
   })
   manageUser(
     @Param('id', new ParseUUIDPipe()) id: string,

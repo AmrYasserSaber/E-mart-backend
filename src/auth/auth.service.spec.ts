@@ -353,16 +353,17 @@ describe('AuthService', () => {
         save: jest.fn().mockResolvedValue(mockRefreshToken),
       };
 
-      dataSource.transaction.mockImplementation(
-        (callback: (m: unknown) => unknown) =>
-          callback({
-            getRepository: () => mockRefreshTokenRepo,
-          }),
-      );
+      dataSource.transaction.mockImplementation(((...args: unknown[]) => {
+        const callback = args[0] ?? args[1];
+        return (callback as (m: unknown) => unknown)({
+          getRepository: () => mockRefreshTokenRepo,
+        });
+      }) as never);
 
       const result = await authService.refresh('valid-refresh-token');
 
       expect(dataSource.transaction).toHaveBeenCalled();
+      expect(mockRefreshTokenRepo.delete).toHaveBeenCalledTimes(1);
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
       expect(result).toHaveProperty('user');
@@ -379,18 +380,18 @@ describe('AuthService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 1 }),
       };
 
-      dataSource.transaction.mockImplementation(
-        (callback: (m: unknown) => unknown) =>
-          callback({
-            getRepository: () => mockRefreshTokenRepo,
-          }),
-      );
+      dataSource.transaction.mockImplementation(((...args: unknown[]) => {
+        const callback = args[0] ?? args[1];
+        return (callback as (m: unknown) => unknown)({
+          getRepository: () => mockRefreshTokenRepo,
+        });
+      }) as never);
 
       await expect(authService.refresh('valid-refresh-token')).rejects.toThrow(
         UnauthorizedException,
       );
 
-      expect(mockRefreshTokenRepo.delete).not.toHaveBeenCalled();
+      expect(mockRefreshTokenRepo.delete).toHaveBeenCalledTimes(1);
     });
 
     it('should throw UnauthorizedException for invalid refresh token', async () => {
@@ -398,12 +399,12 @@ describe('AuthService', () => {
         findOne: jest.fn().mockResolvedValue(null),
       };
 
-      dataSource.transaction.mockImplementation(
-        (callback: (m: unknown) => unknown) =>
-          callback({
-            getRepository: () => mockRefreshTokenRepo,
-          }),
-      );
+      dataSource.transaction.mockImplementation(((...args: unknown[]) => {
+        const callback = args[0] ?? args[1];
+        return (callback as (m: unknown) => unknown)({
+          getRepository: () => mockRefreshTokenRepo,
+        });
+      }) as never);
 
       await expect(authService.refresh('invalid-token')).rejects.toThrow(
         UnauthorizedException,
@@ -421,16 +422,18 @@ describe('AuthService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 1 }),
       };
 
-      dataSource.transaction.mockImplementation(
-        (callback: (m: unknown) => unknown) =>
-          callback({
-            getRepository: () => mockRefreshTokenRepo,
-          }),
-      );
+      dataSource.transaction.mockImplementation(((...args: unknown[]) => {
+        const callback = args[0] ?? args[1];
+        return (callback as (m: unknown) => unknown)({
+          getRepository: () => mockRefreshTokenRepo,
+        });
+      }) as never);
 
       await expect(authService.refresh('expired-token')).rejects.toThrow(
         UnauthorizedException,
       );
+
+      expect(mockRefreshTokenRepo.delete).toHaveBeenCalledTimes(1);
     });
   });
 

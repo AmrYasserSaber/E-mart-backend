@@ -292,7 +292,7 @@ export class AuthService {
       }
 
       if (existingToken.expiresAt < new Date()) {
-        await refreshTokenRepo.delete({ id: existingToken.id });
+        await refreshTokenRepo.delete({ id: existingToken.id, tokenHash });
         throw new UnauthorizedException('Refresh token expired');
       }
 
@@ -301,9 +301,15 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
-      this.requireVerifiedEmail(user);
+      const deleteResult = await refreshTokenRepo.delete({
+        id: existingToken.id,
+        tokenHash,
+      });
+      if (deleteResult.affected !== 1) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
 
-      await refreshTokenRepo.delete({ id: existingToken.id });
+      this.requireVerifiedEmail(user);
 
       const payload: JwtPayload = {
         sub: user.id,

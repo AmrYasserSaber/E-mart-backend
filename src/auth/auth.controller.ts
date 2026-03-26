@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Post,
-  Get,
-  UseGuards,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Controller, Post, Get, UseGuards, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import {
   ApiTags,
@@ -19,7 +12,6 @@ import {
 import { Validate } from 'nestjs-typebox';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import type { JwtPayload } from './types/jwt-payload.interface';
 import type { UserPublic } from '../users/entities/user.entity';
 import {
   RegisterBodySchema,
@@ -229,11 +221,7 @@ export class AuthController {
   @Validate({
     response: { schema: UserPublicSchema, stripUnknownProps: true },
   })
-  async me(@Req() req: Request & { user: JwtPayload }): Promise<UserPublic> {
-    const user = await this.authService.validateUserFromJwt(req.user);
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-    return user;
+  me(@Req() req: Request & { user: UserPublic }): UserPublic {
+    return req.user;
   }
 }

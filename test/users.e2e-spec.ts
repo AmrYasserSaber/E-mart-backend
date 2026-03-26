@@ -13,6 +13,24 @@ import { RefreshToken } from '../src/auth/entities/refresh-token.entity';
 import { Role } from '../src/common/enums/role.enum';
 import { configureNestJsTypebox } from 'nestjs-typebox';
 
+function assertSafeTestDbName(dbName: string | undefined): asserts dbName {
+  if (!dbName) {
+    throw new Error(
+      'Refusing to run e2e tests with dropSchema: true. Set TEST_DB_NAME to a test database (must include "test" or end with "_test").',
+    );
+  }
+
+  const normalized = dbName.toLowerCase();
+  const isClearlyTest =
+    normalized.includes('test') || normalized.endsWith('_test');
+
+  if (!isClearlyTest) {
+    throw new Error(
+      `Refusing to run e2e tests with dropSchema: true on database "${dbName}". TEST_DB_NAME must include "test" or end with "_test".`,
+    );
+  }
+}
+
 describe('Users (e2e)', () => {
   let app: INestApplication<App>;
   let userRepository: Repository<User>;
@@ -24,15 +42,18 @@ describe('Users (e2e)', () => {
       setFormats: true,
     });
 
+    const testDbName = process.env.TEST_DB_NAME;
+    assertSafeTestDbName(testDbName);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
           type: 'postgres',
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432'),
-          username: process.env.DB_USER || 'postgres',
-          password: process.env.DB_PASS || 'postgres',
-          database: process.env.DB_NAME || 'emart_test',
+          host: process.env.TEST_DB_HOST || 'localhost',
+          port: parseInt(process.env.TEST_DB_PORT || '5432'),
+          username: process.env.TEST_DB_USER || 'postgres',
+          password: process.env.TEST_DB_PASS || 'postgres',
+          database: testDbName,
           entities: [User, RefreshToken],
           synchronize: true,
           dropSchema: true,
@@ -54,7 +75,7 @@ describe('Users (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 
   beforeEach(async () => {

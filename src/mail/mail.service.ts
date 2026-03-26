@@ -8,9 +8,11 @@ import nodemailer, { Transporter } from 'nodemailer';
 @Injectable()
 export class MailService {
   private readonly transporter: Transporter;
+  private readonly mailConfig: ReturnType<MailService['getMailConfig']>;
 
   constructor(private readonly configService: ConfigService) {
     const config = this.getMailConfig();
+    this.mailConfig = config;
     this.transporter = nodemailer.createTransport({
       host: config.host,
       port: config.port,
@@ -50,11 +52,22 @@ export class MailService {
       active: boolean;
     },
   ): Promise<void> {
-    const fullName = `${payload.firstName} ${payload.lastName}`.trim();
+    const escapeHtml = (value: string): string =>
+      value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
+    const firstName = escapeHtml(payload.firstName);
+    const lastName = escapeHtml(payload.lastName);
+    const role = escapeHtml(payload.role);
+    const fullName = `${firstName} ${lastName}`.trim();
     const html = `
       <p>Hello ${fullName},</p>
       <p>Your account settings were updated by an administrator.</p>
-      <p>Role: ${payload.role}</p>
+      <p>Role: ${role}</p>
       <p>Status: ${payload.active ? 'Active' : 'Inactive'}</p>
     `;
     await this.send(to, 'Your E-mart account was updated', html);
@@ -71,9 +84,8 @@ export class MailService {
   }
 
   private async send(to: string, subject: string, html: string): Promise<void> {
-    const config = this.getMailConfig();
     await this.transporter.sendMail({
-      from: config.from,
+      from: this.mailConfig.from,
       to,
       subject,
       html,

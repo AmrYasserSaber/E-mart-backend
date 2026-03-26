@@ -62,6 +62,8 @@ export function toUserPublic(user: User): UserPublic {
     lastName: user.lastName,
     email: user.email,
     role: user.role,
-    createdAt: user.createdAt.toISOString(),
+    createdAt: user.createdAt
+      ? user.createdAt.toISOString()
+      : new Date(0).toISOString(),
   };
 }

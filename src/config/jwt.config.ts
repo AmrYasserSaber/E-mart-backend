@@ -2,5 +2,7 @@ import { env } from './env';
 
 export const jwtConfig = () => ({
   secret: env.JWT_SECRET,
-  expiresIn: env.JWT_EXPIRES_IN,
+  signOptions: {
+    expiresIn: env.JWT_EXPIRES_IN as unknown as number,
+  },
 });

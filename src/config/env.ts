@@ -14,7 +14,7 @@ export const env = cleanEnv(process.env, {
   DB_SYNC: bool({ default: false }),
 
   // Auth
-  JWT_SECRET: str({ default: 'dev-secret' }),
+  JWT_SECRET: str(),
   JWT_EXPIRES_IN: str({ default: '1d' }),
   JWT_ACCESS_EXPIRES_IN: str({ default: '15m' }),
   JWT_REFRESH_EXPIRES_IN: str({ default: '7d' }),
