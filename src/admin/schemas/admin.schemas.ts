@@ -41,10 +41,13 @@ export const ListUsersQuerySchema = Type.Object(
 
 export type ListUsersQuery = Static<typeof ListUsersQuerySchema>;
 
-export const ManageUserBodySchema = Type.Object({
-  role: Type.Optional(Type.Enum(Role)),
-  active: Type.Optional(Type.Boolean()),
-});
+export const ManageUserBodySchema = Type.Object(
+  {
+    role: Type.Optional(Type.Enum(Role)),
+    active: Type.Optional(Type.Boolean()),
+  },
+  { minProperties: 1 },
+);
 
 export type ManageUserBody = Static<typeof ManageUserBodySchema>;
 

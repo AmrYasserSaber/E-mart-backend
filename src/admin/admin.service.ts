@@ -66,11 +66,21 @@ export class AdminService {
   async manageUser(id: string, dto: ManageUserBody) {
     const user = await this.getUserEntity(id);
 
-    if (dto.role) {
+    const roleChanged = dto.role !== undefined && dto.role !== user.role;
+    const activeChanged =
+      dto.active !== undefined && typeof dto.active === 'boolean'
+        ? dto.active !== user.active
+        : false;
+
+    if (!roleChanged && !activeChanged) {
+      return toUserPublic(user);
+    }
+
+    if (roleChanged) {
       user.role = dto.role;
     }
-    if (typeof dto.active === 'boolean') {
-      user.active = dto.active;
+    if (activeChanged) {
+      user.active = dto.active as boolean;
     }
 
     const saved = await this.userRepository.save(user);
