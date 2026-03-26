@@ -6,11 +6,13 @@ import {
   toUserPublic,
   type UserPublic,
 } from '../users/entities/user.entity';
-import { ListUsersDto } from './dto/list-users.dto';
 import { getPagination } from '../common/utils/pagination.utils';
-import { ManageUserDto } from './dto/manage-user.dto';
 import { MailService } from '../mail/mail.service';
 import { Role } from '../common/enums/role.enum';
+import {
+  type ListUsersQuery,
+  type ManageUserBody,
+} from './schemas/admin.schemas';
 
 @Injectable()
 export class AdminService {
@@ -22,7 +24,7 @@ export class AdminService {
     private readonly mailService: MailService,
   ) {}
 
-  async listUsers(query: ListUsersDto) {
+  async listUsers(query: ListUsersQuery) {
     const { page, limit, skip } = getPagination(query);
     const where: Record<string, unknown> = {};
 
@@ -32,8 +34,10 @@ export class AdminService {
     if (query.role) {
       where.role = query.role;
     }
-    if (typeof query.active === 'boolean') {
-      where.active = query.active;
+    if (query.active === true || query.active === 'true') {
+      where.active = true;
+    } else if (query.active === false || query.active === 'false') {
+      where.active = false;
     }
 
     const [items, total] = await this.userRepository.findAndCount({
@@ -59,7 +63,7 @@ export class AdminService {
     return toUserPublic(user);
   }
 
-  async manageUser(id: string, dto: ManageUserDto) {
+  async manageUser(id: string, dto: ManageUserBody) {
     const user = await this.getUserEntity(id);
 
     if (dto.role) {

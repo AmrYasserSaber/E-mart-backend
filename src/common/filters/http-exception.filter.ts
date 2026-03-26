@@ -11,6 +11,7 @@ import type { Request, Response } from 'express';
 interface ErrorResponseBody {
   message?: string | string[];
   error?: string;
+  errors?: unknown;
 }
 
 @Catch(HttpException)
@@ -40,6 +41,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
           ? responseBody
           : (normalizedBody?.message ?? exception.message),
       error: normalizedBody?.error,
+      ...(normalizedBody?.errors !== undefined
+        ? { errors: normalizedBody.errors }
+        : {}),
       path: request.url,
       timestamp: new Date().toISOString(),
     });

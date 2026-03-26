@@ -9,7 +9,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
-  ApiBody,
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
@@ -17,14 +16,22 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { Validate } from 'nestjs-typebox';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { ListUsersDto } from './dto/list-users.dto';
-import { ManageUserDto } from './dto/manage-user.dto';
 import { Role } from '../common/enums/role.enum';
-import { User } from '../users/entities/user.entity';
+import { ValidateQueryParams } from '../common/decorators/validate-query-params.decorator';
+import {
+  ListUsersQuerySchema,
+  type ListUsersQuery,
+  ListUsersResponseSchema,
+  ManageUserBodySchema,
+  type ManageUserBody,
+  ManageUserResponseSchema,
+} from './schemas/admin.schemas';
+import { UserPublicSchema } from '../users/schemas/user.schema';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -45,7 +52,11 @@ export class AdminController {
     enum: Role,
   })
   @ApiQuery({ name: 'active', required: false, type: Boolean })
-  listUsers(@Query() query: ListUsersDto) {
+  @ValidateQueryParams(ListUsersQuerySchema)
+  @Validate({
+    response: { schema: ListUsersResponseSchema, stripUnknownProps: true },
+  })
+  listUsers(@Query() query: ListUsersQuery) {
     return this.adminService.listUsers(query);
   }
 
@@ -59,14 +70,17 @@ export class AdminController {
   @Patch('users/:id')
   @ApiOperation({ summary: 'Manage user role/active status' })
   @ApiParam({ name: 'id', type: String })
-  @ApiBody({ type: ManageUserDto })
   @ApiOkResponse({
     description: 'Updated user account',
-    type: User,
+    schema: UserPublicSchema,
+  })
+  @Validate({
+    request: [{ type: 'body', schema: ManageUserBodySchema }],
+    response: { schema: ManageUserResponseSchema, stripUnknownProps: true },
   })
   manageUser(
+    @Body() dto: ManageUserBody,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: ManageUserDto,
   ) {
     return this.adminService.manageUser(id, dto);
   }

@@ -1,8 +1,7 @@
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
-import { ListUsersDto } from './dto/list-users.dto';
-import { ManageUserDto } from './dto/manage-user.dto';
 import { Role } from '../common/enums/role.enum';
+import type { ListUsersQuery, ManageUserBody } from './schemas/admin.schemas';
 
 describe('AdminController', () => {
   let controller: AdminController;
@@ -22,7 +21,7 @@ describe('AdminController', () => {
 
   it('delegates listUsers', async () => {
     adminServiceMock.listUsers.mockResolvedValue({ items: [] });
-    const query: ListUsersDto = { page: 1, role: Role.USER };
+    const query: ListUsersQuery = { page: 1, role: Role.USER };
 
     const result = await controller.listUsers(query);
 
@@ -40,10 +39,10 @@ describe('AdminController', () => {
   });
 
   it('delegates manageUser', async () => {
-    const dto: ManageUserDto = { role: Role.ADMIN, active: true };
+    const dto: ManageUserBody = { role: Role.ADMIN, active: true };
     adminServiceMock.manageUser.mockResolvedValue({ id: 'u1', ...dto });
 
-    const result = await controller.manageUser('u1', dto);
+    const result = await controller.manageUser(dto, 'u1');
 
     expect(result).toEqual({ id: 'u1', ...dto });
     expect(adminServiceMock.manageUser).toHaveBeenCalledWith('u1', dto);
