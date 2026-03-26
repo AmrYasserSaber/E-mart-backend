@@ -7,7 +7,6 @@ import {
   ApiBody,
   ApiOkResponse,
   ApiBadRequestResponse,
-  ApiConflictResponse,
 } from '@nestjs/swagger';
 import { Validate } from 'nestjs-typebox';
 import { AuthService } from './auth.service';
@@ -107,17 +106,6 @@ export class AuthController {
       type: 'object',
       properties: {
         verified: { type: 'boolean', enum: [true] },
-        user: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            firstName: { type: 'string' },
-            lastName: { type: 'string' },
-            email: { type: 'string', format: 'email' },
-            role: { type: 'string', enum: ['user', 'seller', 'admin'] },
-            createdAt: { type: 'string', format: 'date-time' },
-          },
-        },
       },
     },
   })
@@ -136,7 +124,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Resend email verification code',
     description:
-      'Issues a new 6-digit code (24h validity) for unverified accounts. Response text is the same whether the email exists or not, to avoid account enumeration. Returns 409 if the email is already verified.',
+      'Issues a new 6-digit code (24h validity) for pending verification. Response is the same whether the email exists or is already verified (to avoid account enumeration).',
   })
   @ApiBody({
     description: 'Email address used at registration',
@@ -165,19 +153,6 @@ export class AuthController {
   })
   @ApiBadRequestResponse({
     description: 'Invalid body (e.g. malformed email)',
-  })
-  @ApiConflictResponse({
-    description: 'This email is already verified',
-    schema: {
-      type: 'object',
-      properties: {
-        statusCode: { type: 'number', example: 409 },
-        message: { type: 'string', example: 'Email is already verified' },
-        error: { type: 'string', example: 'Conflict' },
-        path: { type: 'string', example: '/auth/resend-verification' },
-        timestamp: { type: 'string', format: 'date-time' },
-      },
-    },
   })
   @Validate({
     request: [{ type: 'body', schema: ResendVerificationBodySchema }],

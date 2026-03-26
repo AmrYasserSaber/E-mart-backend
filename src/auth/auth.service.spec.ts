@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { createHash } from 'crypto';
+import { createHmac } from 'crypto';
 import {
   ConflictException,
   UnauthorizedException,
@@ -167,7 +167,12 @@ describe('AuthService', () => {
   describe('verifyEmail', () => {
     const future = new Date(Date.now() + 60_000);
     const code = '123456';
-    const codeHash = createHash('sha256').update(code, 'utf8').digest('hex');
+    const codeHash = createHmac(
+      'sha256',
+      process.env.EMAIL_VERIFICATION_SECRET as string,
+    )
+      .update(code, 'utf8')
+      .digest('hex');
 
     const userPendingVerification: User = {
       ...mockUser,
@@ -193,7 +198,6 @@ describe('AuthService', () => {
         mockUser.id,
       );
       expect(result.verified).toBe(true);
-      expect(result.user.email).toBe(mockUser.email);
     });
 
     it('should return verified when already verified (idempotent)', async () => {
@@ -257,12 +261,12 @@ describe('AuthService', () => {
     it('throws when email is already verified', async () => {
       usersService.findByEmail.mockResolvedValue(mockVerifiedUser);
 
-      await expect(
-        authService.resendVerificationEmail('john@example.com'),
-      ).rejects.toThrow(ConflictException);
+      const result =
+        await authService.resendVerificationEmail('john@example.com');
 
       expect(usersService.setEmailVerificationCode).not.toHaveBeenCalled();
       expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
+      expect(result).toEqual({ message: RESEND_VERIFICATION_MESSAGE });
     });
 
     it('issues new code and sends mail for unverified user', async () => {

@@ -9,7 +9,13 @@ import { JwtService } from '@nestjs/jwt';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, LessThan } from 'typeorm';
-import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  timingSafeEqual,
+} from 'crypto';
 import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { User, UserPublic, toUserPublic } from '../users/entities/user.entity';
@@ -46,7 +52,9 @@ export class AuthService {
   }
 
   private hashEmailVerificationCode(code: string): string {
-    return createHash('sha256').update(code, 'utf8').digest('hex');
+    return createHmac('sha256', env.EMAIL_VERIFICATION_SECRET)
+      .update(code, 'utf8')
+      .digest('hex');
   }
 
   private requireVerifiedEmail(user: User): void {
@@ -180,7 +188,7 @@ export class AuthService {
       });
     } catch (err) {
       this.logger.warn(
-        `Failed to send confirmation email to ${user.email}`,
+        `Failed to send confirmation email for userId=${user.id}`,
         err instanceof Error ? err.stack : err,
       );
     }
@@ -195,7 +203,8 @@ export class AuthService {
     }
 
     if (user.emailVerifiedAt) {
-      return { verified: true, user: toUserPublic(user) };
+      // Anti-enumeration: do not return any account/profile data for public verification calls.
+      return { verified: true };
     }
 
     if (!user.emailVerificationCodeHash || !user.emailVerificationExpiresAt) {
@@ -216,8 +225,8 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired verification code');
     }
 
-    const updated = await this.usersService.markEmailAsVerified(user.id);
-    return { verified: true, user: toUserPublic(updated) };
+    await this.usersService.markEmailAsVerified(user.id);
+    return { verified: true };
   }
 
   async resendVerificationEmail(
@@ -228,8 +237,10 @@ export class AuthService {
       return { message: RESEND_VERIFICATION_MESSAGE };
     }
 
+    // Anti-enumeration: return the same generic message whether the email is already verified
+    // or pending verification.
     if (user.emailVerifiedAt) {
-      throw new ConflictException('Email is already verified');
+      return { message: RESEND_VERIFICATION_MESSAGE };
     }
 
     const code = this.generateEmailVerificationCode();
@@ -249,7 +260,7 @@ export class AuthService {
       });
     } catch (err) {
       this.logger.warn(
-        `Failed to send confirmation email to ${user.email}`,
+        `Failed to send confirmation email for userId=${user.id}`,
         err instanceof Error ? err.stack : err,
       );
     }

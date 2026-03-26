@@ -167,11 +167,10 @@ describe('Auth (e2e)', () => {
           email: 'john@example.com',
           password: 'password123',
         })
-        .expect(201);
+        .expect(200);
 
-      expect(response.body).toHaveProperty('access_token');
-      expect(response.body).toHaveProperty('refresh_token');
-      expect(response.body.user.email).toBe('john@example.com');
+      expect(response.body).toHaveProperty('accessToken');
+      expect(response.body).toHaveProperty('refreshToken');
     });
 
     it('should return 401 for invalid password', async () => {

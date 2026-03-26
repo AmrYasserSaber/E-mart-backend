@@ -1,7 +1,11 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
-import { User } from '../users/entities/user.entity';
+import {
+  User,
+  toUserPublic,
+  type UserPublic,
+} from '../users/entities/user.entity';
 import { ListUsersDto } from './dto/list-users.dto';
 import { getPagination } from '../common/utils/pagination.utils';
 import { ManageUserDto } from './dto/manage-user.dto';
@@ -39,8 +43,10 @@ export class AdminService {
       take: limit,
     });
 
+    const sanitizedItems: UserPublic[] = items.map(toUserPublic);
+
     return {
-      items,
+      items: sanitizedItems,
       total,
       page,
       limit,
@@ -49,15 +55,12 @@ export class AdminService {
   }
 
   async getUser(id: string) {
-    const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    return user;
+    const user = await this.getUserEntity(id);
+    return toUserPublic(user);
   }
 
   async manageUser(id: string, dto: ManageUserDto) {
-    const user = await this.getUser(id);
+    const user = await this.getUserEntity(id);
 
     if (dto.role) {
       user.role = dto.role;
@@ -84,6 +87,14 @@ export class AdminService {
       }
     }
 
-    return saved;
+    return toUserPublic(saved);
+  }
+
+  private async getUserEntity(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 }

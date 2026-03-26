@@ -71,7 +71,6 @@ describe('AdminService', () => {
     });
 
     expect(result.role).toBe(Role.ADMIN);
-    expect(result.active).toBe(false);
     expect(mockMailService.sendAdminChangeNotice).toHaveBeenCalledTimes(1);
   });
 });

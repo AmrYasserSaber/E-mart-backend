@@ -85,7 +85,7 @@ describe('AuthController', () => {
 
   describe('verifyEmail', () => {
     it('should call authService.verifyEmail with correct arguments', async () => {
-      const verifyResponse = { verified: true as const, user: mockUserPublic };
+      const verifyResponse = { verified: true as const };
       authService.verifyEmail.mockResolvedValue(verifyResponse);
 
       const body = { email: 'john@example.com', code: '123456' };

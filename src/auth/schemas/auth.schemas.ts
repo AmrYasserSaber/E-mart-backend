@@ -63,7 +63,6 @@ export type VerifyEmailBody = Static<typeof VerifyEmailBodySchema>;
 
 export const VerifyEmailResponseSchema = Type.Object({
   verified: Type.Literal(true),
-  user: UserPublicSchema,
 });
 
 export type VerifyEmailResponse = Static<typeof VerifyEmailResponseSchema>;
