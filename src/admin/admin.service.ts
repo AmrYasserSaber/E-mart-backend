@@ -76,7 +76,7 @@ export class AdminService {
       return toUserPublic(user);
     }
 
-    if (roleChanged) {
+    if (roleChanged && dto.role !== undefined) {
       user.role = dto.role;
     }
     if (activeChanged) {
