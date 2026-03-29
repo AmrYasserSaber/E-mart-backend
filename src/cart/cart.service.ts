@@ -57,7 +57,9 @@ export class CartService {
     if (cartItem) {
       const newQuantity = cartItem.quantity + addDto.quantity;
       if (product.stock < newQuantity) {
-        throw new BadRequestException('Insufficient product stock for this quantity');
+        throw new BadRequestException(
+          'Insufficient product stock for this quantity',
+        );
       }
       cartItem.quantity = newQuantity;
       await this.cartItemRepository.save(cartItem);
@@ -116,5 +118,37 @@ export class CartService {
     const cart = await this.getCart(userId);
     await this.cartItemRepository.delete({ cartId: cart.id });
     return this.getCart(userId);
+  }
+
+  async getCartSummary(userId: string) {
+    const cart = await this.getCart(userId);
+
+    if (!cart.items || cart.items.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    const items = cart.items.map((item) => ({
+      productId: item.productId,
+      title: item.product.title,
+      qty: item.quantity,
+      price: item.product.price,
+      stock: item.product.stock,
+    }));
+
+    for (const item of items) {
+      if (item.stock < item.qty) {
+        throw new BadRequestException(
+          `Insufficient stock for product ${item.title}`,
+        );
+      }
+    }
+
+    const total = items.reduce((acc, item) => acc + item.qty * item.price, 0);
+
+    return {
+      cartId: cart.id,
+      items: items.map(({ stock, ...rest }) => rest),
+      total,
+    };
   }
 }
