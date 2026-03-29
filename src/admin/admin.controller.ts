@@ -35,6 +35,10 @@ import {
   ManageOrderStatusBodySchema,
   type ManageOrderStatusBody,
   ManageOrderStatusResponseSchema,
+  ApproveSellerStoreResponseSchema,
+  ListPendingSellersQuerySchema,
+  type ListPendingSellersQuery,
+  ListPendingSellersResponseSchema,
 } from './schemas/admin.schemas';
 import { UserPublicSchema } from '../users/schemas/user.schema';
 
@@ -108,5 +112,31 @@ export class AdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.adminService.updateOrderStatus(id, dto);
+  }
+
+  @Patch('sellers/:id/approve')
+  @ApiOperation({ summary: 'Approve seller store (admin)' })
+  @ApiParam({ name: 'id', type: String })
+  @Validate({
+    response: {
+      schema: ApproveSellerStoreResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  approveSellerStore(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.adminService.approveSellerStore(id);
+  }
+
+  @Get('sellers/pending')
+  @ApiOperation({ summary: 'List all pending seller applications (admin)' })
+  @ValidateQueryParams(ListPendingSellersQuerySchema)
+  @Validate({
+    response: {
+      schema: ListPendingSellersResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  listPendingSellers(@Query() query: ListPendingSellersQuery) {
+    return this.adminService.listPendingSellers(query);
   }
 }

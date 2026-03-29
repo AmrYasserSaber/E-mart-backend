@@ -4,12 +4,17 @@ import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { User } from '../users/entities/user.entity';
 import { Order } from '../orders/entities/order.entity';
+import { Seller } from '../sellers/entities/seller.entity';
 import { MailModule } from '../mail/mail.module';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Order]), MailModule, AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([User, Order, Seller]),
+    MailModule,
+    AuthModule,
+  ],
   controllers: [AdminController],
   providers: [AdminService, RolesGuard],
 })

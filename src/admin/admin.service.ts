@@ -14,9 +14,11 @@ import {
   type ManageUserBody,
   type ListAdminOrdersQuery,
   type ManageOrderStatusBody,
+  type ListPendingSellersQuery,
 } from './schemas/admin.schemas';
 import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
+import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
 
 @Injectable()
 export class AdminService {
@@ -27,6 +29,8 @@ export class AdminService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    @InjectRepository(Seller)
+    private readonly sellerRepository: Repository<Seller>,
     private readonly mailService: MailService,
   ) {}
 
@@ -170,6 +174,52 @@ export class AdminService {
       id: saved.id,
       status: saved.status,
       updatedAt: saved.updatedAt.toISOString(),
+    };
+  }
+
+  async approveSellerStore(id: string) {
+    const seller = await this.sellerRepository.findOne({ where: { id } });
+    if (!seller) {
+      throw new NotFoundException('Seller not found');
+    }
+
+    seller.status = SellerStatus.APPROVED;
+    const saved = await this.sellerRepository.save(seller);
+
+    return {
+      id: saved.id,
+      userId: saved.userId,
+      status: saved.status,
+      approvedAt: new Date().toISOString(),
+    };
+  }
+
+  async listPendingSellers(query: ListPendingSellersQuery) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+
+    const [sellers, total] = await this.sellerRepository.findAndCount({
+      where: { status: SellerStatus.PENDING },
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      data: sellers.map((seller) => ({
+        id: seller.id,
+        userId: seller.userId,
+        storeName: seller.storeName,
+        description: seller.description,
+        status: seller.status,
+        rating: seller.rating,
+        createdAt: seller.createdAt.toISOString(),
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 }

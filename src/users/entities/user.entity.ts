@@ -4,8 +4,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToOne,
 } from 'typeorm';
 import { Role } from '../../common/enums/role.enum';
+import { Seller } from '../../sellers/entities/seller.entity';
 
 @Entity('users')
 export class User {
@@ -44,6 +46,8 @@ export class User {
 
   @Column({ type: 'timestamptz', nullable: true })
   emailVerificationExpiresAt!: Date | null;
+  @OneToOne(() => Seller, (seller) => seller.user)
+  seller?: Seller;
 }
 
 export interface UserPublic {

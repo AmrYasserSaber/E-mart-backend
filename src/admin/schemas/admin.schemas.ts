@@ -100,3 +100,45 @@ export const ManageOrderStatusResponseSchema = UpdateOrderStatusResponseSchema;
 export type ManageOrderStatusResponse = Static<
   typeof ManageOrderStatusResponseSchema
 >;
+
+export const ApproveSellerStoreResponseSchema = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  userId: Type.String({ format: 'uuid' }),
+  status: Type.String(),
+  approvedAt: Type.String({ format: 'date-time' }),
+});
+
+export type ApproveSellerStoreResponse = Static<
+  typeof ApproveSellerStoreResponseSchema
+>;
+
+export const ListPendingSellersQuerySchema = Type.Object({
+  page: Type.Optional(Type.Integer({ minimum: 1 })),
+  limit: Type.Optional(Type.Integer({ minimum: 1 })),
+});
+
+export type ListPendingSellersQuery = Static<
+  typeof ListPendingSellersQuerySchema
+>;
+
+export const PendingSellerItemSchema = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  userId: Type.String({ format: 'uuid' }),
+  storeName: Type.String(),
+  description: Type.String(),
+  status: Type.String(),
+  rating: Type.Number({ minimum: 0 }),
+  createdAt: Type.String({ format: 'date-time' }),
+});
+
+export const ListPendingSellersResponseSchema = Type.Object({
+  data: Type.Array(PendingSellerItemSchema),
+  total: Type.Integer({ minimum: 0 }),
+  page: Type.Integer({ minimum: 1 }),
+  limit: Type.Integer({ minimum: 1 }),
+  totalPages: Type.Integer({ minimum: 0 }),
+});
+
+export type ListPendingSellersResponse = Static<
+  typeof ListPendingSellersResponseSchema
+>;
