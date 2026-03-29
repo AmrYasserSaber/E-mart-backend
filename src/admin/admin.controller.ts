@@ -29,6 +29,16 @@ import {
   ManageUserBodySchema,
   type ManageUserBody,
   ManageUserResponseSchema,
+  ListAdminOrdersQuerySchema,
+  type ListAdminOrdersQuery,
+  ListAdminOrdersResponseSchema,
+  ManageOrderStatusBodySchema,
+  type ManageOrderStatusBody,
+  ManageOrderStatusResponseSchema,
+  ApproveSellerStoreResponseSchema,
+  ListPendingSellersQuerySchema,
+  type ListPendingSellersQuery,
+  ListPendingSellersResponseSchema,
 } from './schemas/admin.schemas';
 import { UserPublicSchema } from '../users/schemas/user.schema';
 
@@ -72,5 +82,61 @@ export class AdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.adminService.manageUser(id, dto);
+  }
+
+  @Get('orders')
+  @ApiOperation({ summary: 'List all orders (admin)' })
+  @ValidateQueryParams(ListAdminOrdersQuerySchema)
+  @Validate({
+    response: {
+      schema: ListAdminOrdersResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  listOrders(@Query() query: ListAdminOrdersQuery) {
+    return this.adminService.listOrders(query);
+  }
+
+  @Patch('orders/:id/status')
+  @ApiOperation({ summary: 'Update order status (admin)' })
+  @ApiParam({ name: 'id', type: String })
+  @Validate({
+    request: [{ type: 'body', schema: ManageOrderStatusBodySchema }],
+    response: {
+      schema: ManageOrderStatusResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  updateOrderStatus(
+    @Body() dto: ManageOrderStatusBody,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.adminService.updateOrderStatus(id, dto);
+  }
+
+  @Patch('sellers/:id/approve')
+  @ApiOperation({ summary: 'Approve seller store (admin)' })
+  @ApiParam({ name: 'id', type: String })
+  @Validate({
+    response: {
+      schema: ApproveSellerStoreResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  approveSellerStore(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.adminService.approveSellerStore(id);
+  }
+
+  @Get('sellers/pending')
+  @ApiOperation({ summary: 'List all pending seller applications (admin)' })
+  @ValidateQueryParams(ListPendingSellersQuerySchema)
+  @Validate({
+    response: {
+      schema: ListPendingSellersResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  listPendingSellers(@Query() query: ListPendingSellersQuery) {
+    return this.adminService.listPendingSellers(query);
   }
 }

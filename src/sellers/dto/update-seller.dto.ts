@@ -1,4 +1,3 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateSellerDto } from './create-seller.dto';
+import type { RegisterSellerBody } from '../schemas/seller.schema';
 
-export class UpdateSellerDto extends PartialType(CreateSellerDto) {}
+export type UpdateSellerDto = Partial<RegisterSellerBody>;

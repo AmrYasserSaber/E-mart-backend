@@ -30,4 +30,10 @@ export const env = cleanEnv(process.env, {
 
   // Payments
   STRIPE_SECRET_KEY: str({ default: '' }),
+  KASHIER_URL: str({ default: '' }),
+  KASHIER_API_KEY: str({ default: '' }),
+  KASHIER_SECRET_KEY: str({ default: '' }),
+  KASHIER_MERCHANT_ID: str({ default: '' }),
+  KASHIER_WEBHOOK_URL: str({ default: '' }),
+  KASHIER_REDIRECT_URL: str({ default: '' }),
 });

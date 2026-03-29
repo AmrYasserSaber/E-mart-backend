@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import type {
 import { Product } from './entities/product.entity';
 import { Category } from '../categories/entities/category.entity';
 import { getPagination } from '../common/utils/pagination.utils';
+import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
 
 @Injectable()
 export class ProductsService {
@@ -21,7 +23,25 @@ export class ProductsService {
     private readonly productRepository: Repository<Product>,
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(Seller)
+    private readonly sellerRepository: Repository<Seller>,
   ) {}
+
+  private async ensureSellerCanManageProducts(sellerUserId: string) {
+    const seller = await this.sellerRepository.findOne({
+      where: { userId: sellerUserId },
+    });
+
+    if (!seller) {
+      throw new ForbiddenException('Seller profile not found');
+    }
+
+    if (seller.status !== SellerStatus.APPROVED) {
+      throw new ForbiddenException(
+        'Seller store must be approved before managing products',
+      );
+    }
+  }
 
   private toApiProduct(product: Product) {
     return product;
@@ -32,6 +52,8 @@ export class ProductsService {
     if (!assignedSellerId) {
       throw new BadRequestException('Seller id is required');
     }
+
+    await this.ensureSellerCanManageProducts(assignedSellerId);
 
     const category = await this.categoryRepository.findOne({
       where: { id: createProductDto.categoryId },
@@ -117,6 +139,10 @@ export class ProductsService {
       throw new BadRequestException('You can only update your own products');
     }
 
+    if (sellerId) {
+      await this.ensureSellerCanManageProducts(sellerId);
+    }
+
     if (updateProductDto.categoryId) {
       const category = await this.categoryRepository.findOne({
         where: { id: updateProductDto.categoryId },
@@ -138,6 +164,9 @@ export class ProductsService {
     }
     if (sellerId && product.sellerId !== sellerId) {
       throw new BadRequestException('You can only delete your own products');
+    }
+    if (sellerId) {
+      await this.ensureSellerCanManageProducts(sellerId);
     }
     await this.productRepository.remove(product);
     return { message: 'Product deleted successfully' };

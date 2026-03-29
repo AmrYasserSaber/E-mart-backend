@@ -2,41 +2,87 @@ import {
   Controller,
   Get,
   Post,
-  Body,
-  Patch,
-  Param,
+  Put,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Validate } from 'nestjs-typebox';
 import { CartService } from './cart.service';
-import { CreateCartDto } from './dto/create-cart.dto';
-import { UpdateCartDto } from './dto/update-cart.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { UserPublic } from '../users/entities/user.entity';
+import {
+  AddToCartBodySchema,
+  CartItemIdParamSchema,
+  UpdateCartItemBodySchema,
+  type AddToCartBody,
+  type UpdateCartItemBody,
+} from './schemas/cart.schemas';
 
+@ApiTags('cart')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('cart')
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
-  @Post()
-  create(@Body() createCartDto: CreateCartDto) {
-    return this.cartService.create(createCartDto);
-  }
-
   @Get()
-  findAll() {
-    return this.cartService.findAll();
+  getCart(@CurrentUser() currentUser: UserPublic) {
+    return this.cartService.getCart(currentUser.id);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.cartService.findOne(+id);
+  @Post()
+  @Validate({
+    request: [
+      {
+        type: 'body',
+        schema: AddToCartBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  addItem(
+    addDto: AddToCartBody,
+    @CurrentUser() currentUser: UserPublic,
+  ) {
+    return this.cartService.addItem(currentUser.id, addDto);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateCartDto: UpdateCartDto) {
-    return this.cartService.update(+id, updateCartDto);
+  @Put('items/:itemId')
+  @Validate({
+    request: [
+      { name: 'itemId', type: 'param', schema: CartItemIdParamSchema },
+      {
+        type: 'body',
+        schema: UpdateCartItemBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  updateItemQuantity(
+    itemId: string,
+    updateDto: UpdateCartItemBody,
+    @CurrentUser() currentUser: UserPublic,
+  ) {
+    return this.cartService.updateItemQuantity(currentUser.id, itemId, updateDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.cartService.remove(+id);
+  @Delete('items/:itemId')
+  @Validate({
+    request: [
+      { name: 'itemId', type: 'param', schema: CartItemIdParamSchema },
+    ],
+  })
+  removeItem(
+    itemId: string,
+    @CurrentUser() currentUser: UserPublic,
+  ) {
+    return this.cartService.removeItem(currentUser.id, itemId);
+  }
+
+  @Delete()
+  clearCart(@CurrentUser() currentUser: UserPublic) {
+    return this.cartService.clearCart(currentUser.id);
   }
 }

@@ -13,9 +13,7 @@ export const CreateProductBodySchema = Type.Object({
   categoryId: Type.String({ format: 'uuid' }),
   sellerId: Type.Optional(Type.String({ format: 'uuid' })),
   images: Type.Array(Type.String(), { maxItems: 10 }),
-  ratingAvg: Type.Optional(
-    Type.Number({ minimum: 0, maximum: 5, multipleOf: 0.01 }),
-  ),
+  ratingAvg: Type.Optional(Type.Number({ minimum: 0, maximum: 5 })),
   ratingCount: Type.Optional(Type.Integer({ minimum: 0 })),
 });
 
