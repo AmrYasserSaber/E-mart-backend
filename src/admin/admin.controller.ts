@@ -29,6 +29,12 @@ import {
   ManageUserBodySchema,
   type ManageUserBody,
   ManageUserResponseSchema,
+  ListAdminOrdersQuerySchema,
+  type ListAdminOrdersQuery,
+  ListAdminOrdersResponseSchema,
+  ManageOrderStatusBodySchema,
+  type ManageOrderStatusBody,
+  ManageOrderStatusResponseSchema,
 } from './schemas/admin.schemas';
 import { UserPublicSchema } from '../users/schemas/user.schema';
 
@@ -72,5 +78,35 @@ export class AdminController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.adminService.manageUser(id, dto);
+  }
+
+  @Get('orders')
+  @ApiOperation({ summary: 'List all orders (admin)' })
+  @ValidateQueryParams(ListAdminOrdersQuerySchema)
+  @Validate({
+    response: {
+      schema: ListAdminOrdersResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  listOrders(@Query() query: ListAdminOrdersQuery) {
+    return this.adminService.listOrders(query);
+  }
+
+  @Patch('orders/:id/status')
+  @ApiOperation({ summary: 'Update order status (admin)' })
+  @ApiParam({ name: 'id', type: String })
+  @Validate({
+    request: [{ type: 'body', schema: ManageOrderStatusBodySchema }],
+    response: {
+      schema: ManageOrderStatusResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  updateOrderStatus(
+    @Body() dto: ManageOrderStatusBody,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.adminService.updateOrderStatus(id, dto);
   }
 }

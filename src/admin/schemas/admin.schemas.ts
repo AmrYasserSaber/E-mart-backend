@@ -1,6 +1,11 @@
 import { Type, Static } from '@sinclair/typebox';
 import { Role } from '../../common/enums/role.enum';
 import { UserPublicSchema } from '../../users/schemas/user.schema';
+import {
+  OrderResponseSchema,
+  OrderStatusSchema,
+  UpdateOrderStatusResponseSchema,
+} from '../../orders/schemas/order.schema';
 
 export const ListUsersQuerySchema = Type.Object(
   {
@@ -62,3 +67,36 @@ export const ListUsersResponseSchema = Type.Object({
 export type ListUsersResponse = Static<typeof ListUsersResponseSchema>;
 
 export const ManageUserResponseSchema = UserPublicSchema;
+
+export const ListAdminOrdersQuerySchema = Type.Object({
+  page: Type.Optional(Type.Integer({ minimum: 1 })),
+  limit: Type.Optional(Type.Integer({ minimum: 1 })),
+  userId: Type.Optional(Type.String({ format: 'uuid' })),
+  status: Type.Optional(OrderStatusSchema),
+});
+
+export type ListAdminOrdersQuery = Static<typeof ListAdminOrdersQuerySchema>;
+
+export const ListAdminOrdersResponseSchema = Type.Object({
+  data: Type.Array(OrderResponseSchema),
+  total: Type.Integer({ minimum: 0 }),
+  page: Type.Integer({ minimum: 1 }),
+  limit: Type.Integer({ minimum: 1 }),
+  totalPages: Type.Integer({ minimum: 0 }),
+});
+
+export type ListAdminOrdersResponse = Static<
+  typeof ListAdminOrdersResponseSchema
+>;
+
+export const ManageOrderStatusBodySchema = Type.Object({
+  status: OrderStatusSchema,
+});
+
+export type ManageOrderStatusBody = Static<typeof ManageOrderStatusBodySchema>;
+
+export const ManageOrderStatusResponseSchema = UpdateOrderStatusResponseSchema;
+
+export type ManageOrderStatusResponse = Static<
+  typeof ManageOrderStatusResponseSchema
+>;

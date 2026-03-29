@@ -12,7 +12,11 @@ import { Role } from '../common/enums/role.enum';
 import {
   type ListUsersQuery,
   type ManageUserBody,
+  type ListAdminOrdersQuery,
+  type ManageOrderStatusBody,
 } from './schemas/admin.schemas';
+import { Order } from '../orders/entities/order.entity';
+import { OrderStatus } from '../orders/entities/order.entity';
 
 @Injectable()
 export class AdminService {
@@ -21,6 +25,8 @@ export class AdminService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Order)
+    private readonly orderRepository: Repository<Order>,
     private readonly mailService: MailService,
   ) {}
 
@@ -110,5 +116,60 @@ export class AdminService {
       throw new NotFoundException('User not found');
     }
     return user;
+  }
+
+  async listOrders(query: ListAdminOrdersQuery) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+
+    const where: { userId?: string; status?: OrderStatus } = {};
+    if (query.userId) {
+      where.userId = query.userId;
+    }
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    const [orders, total] = await this.orderRepository.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      data: orders.map((order) => ({
+        id: order.id,
+        userId: order.userId,
+        items: order.items,
+        total: Number(order.total),
+        status: order.status,
+        shippingAddress: order.shippingAddress,
+        paymentIntentId: order.paymentIntentId,
+        createdAt: order.createdAt.toISOString(),
+        updatedAt: order.updatedAt.toISOString(),
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async updateOrderStatus(id: string, dto: ManageOrderStatusBody) {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    order.status = dto.status;
+    const saved = await this.orderRepository.save(order);
+
+    return {
+      id: saved.id,
+      status: saved.status,
+      updatedAt: saved.updatedAt.toISOString(),
+    };
   }
 }
