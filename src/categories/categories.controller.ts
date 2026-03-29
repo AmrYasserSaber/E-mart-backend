@@ -2,18 +2,21 @@ import {
   Controller,
   Get,
   Post,
-  Body,
   Patch,
-  Param,
   Delete,
   UseGuards,
-  ParseUUIDPipe,
   Put,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Validate } from 'nestjs-typebox';
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { UpdateCategoryDto } from './dto/update-category.dto';
+import {
+  CategoryIdParamSchema,
+  CreateCategoryBodySchema,
+  UpdateCategoryBodySchema,
+  type CreateCategoryBody,
+  type UpdateCategoryBody,
+} from './schemas/categories.schemas';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,7 +31,16 @@ export class CategoriesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
-  create(@Body() createCategoryDto: CreateCategoryDto) {
+  @Validate({
+    request: [
+      {
+        type: 'body',
+        schema: CreateCategoryBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  create(createCategoryDto: CreateCategoryBody) {
     return this.categoriesService.create(createCategoryDto);
   }
 
@@ -41,10 +53,17 @@ export class CategoriesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
-  replace(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateCategoryDto: UpdateCategoryDto,
-  ) {
+  @Validate({
+    request: [
+      { name: 'id', type: 'param', schema: CategoryIdParamSchema },
+      {
+        type: 'body',
+        schema: UpdateCategoryBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  replace(id: string, updateCategoryDto: UpdateCategoryBody) {
     return this.categoriesService.update(id, updateCategoryDto);
   }
 
@@ -52,10 +71,17 @@ export class CategoriesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateCategoryDto: UpdateCategoryDto,
-  ) {
+  @Validate({
+    request: [
+      { name: 'id', type: 'param', schema: CategoryIdParamSchema },
+      {
+        type: 'body',
+        schema: UpdateCategoryBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  update(id: string, updateCategoryDto: UpdateCategoryBody) {
     return this.categoriesService.update(id, updateCategoryDto);
   }
 
@@ -63,7 +89,10 @@ export class CategoriesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  @Validate({
+    request: [{ name: 'id', type: 'param', schema: CategoryIdParamSchema }],
+  })
+  remove(id: string) {
     return this.categoriesService.remove(id);
   }
 }

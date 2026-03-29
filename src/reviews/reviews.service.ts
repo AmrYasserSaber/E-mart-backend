@@ -5,8 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateReviewDto } from './dto/create-review.dto';
-import { UpdateReviewDto } from './dto/update-review.dto';
+import type { CreateReviewBody, UpdateReviewBody } from './schemas/reviews.schemas';
 import { Review } from './entities/review.entity';
 import { Product } from '../products/entities/product.entity';
 import { User } from '../users/entities/user.entity';
@@ -27,7 +26,7 @@ export class ReviewsService {
   async create(
     productId: string,
     userId: string,
-    createReviewDto: CreateReviewDto,
+    createReviewDto: CreateReviewBody,
   ) {
     const product = await this.productRepository.findOne({
       where: { id: productId },
@@ -87,7 +86,7 @@ export class ReviewsService {
     id: string,
     userId: string,
     userRole: Role,
-    updateReviewDto: UpdateReviewDto,
+    updateReviewDto: UpdateReviewBody,
   ) {
     const review = await this.findOne(id);
     if (review.userId !== userId && userRole !== Role.ADMIN) {

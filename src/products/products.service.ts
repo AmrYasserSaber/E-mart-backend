@@ -5,9 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { ProductFilterDto } from './dto/product-filter.dto';
+import type {
+  CreateProductBody,
+  ProductFilterQuery,
+  UpdateProductBody,
+} from './schemas/products.schemas';
 import { Product } from './entities/product.entity';
 import { Category } from '../categories/entities/category.entity';
 import { getPagination } from '../common/utils/pagination.utils';
@@ -25,7 +27,7 @@ export class ProductsService {
     return product;
   }
 
-  async create(createProductDto: CreateProductDto, sellerId?: string) {
+  async create(createProductDto: CreateProductBody, sellerId?: string) {
     const assignedSellerId = sellerId ?? createProductDto.sellerId;
     if (!assignedSellerId) {
       throw new BadRequestException('Seller id is required');
@@ -48,7 +50,7 @@ export class ProductsService {
     return this.toApiProduct(saved);
   }
 
-  async findAll(filters: ProductFilterDto) {
+  async findAll(filters: ProductFilterQuery) {
     const { page, limit, skip } = getPagination(filters);
     const qb = this.productRepository
       .createQueryBuilder('product')
@@ -103,7 +105,7 @@ export class ProductsService {
 
   async update(
     id: string,
-    updateProductDto: UpdateProductDto,
+    updateProductDto: UpdateProductBody,
     sellerId?: string,
   ) {
     const product = await this.productRepository.findOne({ where: { id } });

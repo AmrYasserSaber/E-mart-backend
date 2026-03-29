@@ -2,23 +2,28 @@ import {
   Controller,
   Get,
   Post,
-  Body,
   Patch,
-  Param,
   Delete,
   Query,
   UseGuards,
-  ParseUUIDPipe,
-  DefaultValuePipe,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Validate } from 'nestjs-typebox';
 import { ReviewsService } from './reviews.service';
-import { CreateReviewDto } from './dto/create-review.dto';
-import { UpdateReviewDto } from './dto/update-review.dto';
+import {
+  CreateReviewBodySchema,
+  ReviewIdParamSchema,
+  ReviewProductIdParamSchema,
+  ReviewsListQuerySchema,
+  UpdateReviewBodySchema,
+  type CreateReviewBody,
+  type ReviewsListQuery,
+  type UpdateReviewBody,
+} from './schemas/reviews.schemas';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserPublic } from '../users/entities/user.entity';
+import { ValidateQueryParams } from '../common/decorators/validate-query-params.decorator';
 
 @ApiTags('reviews')
 @Controller('reviews')
@@ -28,9 +33,19 @@ export class ReviewsController {
   @Post(':productId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Validate({
+    request: [
+      { name: 'productId', type: 'param', schema: ReviewProductIdParamSchema },
+      {
+        type: 'body',
+        schema: CreateReviewBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
   create(
-    @Param('productId', ParseUUIDPipe) productId: string,
-    @Body() createReviewDto: CreateReviewDto,
+    productId: string,
+    createReviewDto: CreateReviewBody,
     @CurrentUser() currentUser: UserPublic,
   ) {
     return this.reviewsService.create(
@@ -41,25 +56,42 @@ export class ReviewsController {
   }
 
   @Get('item/:reviewId')
-  findOne(@Param('reviewId', ParseUUIDPipe) reviewId: string) {
+  @Validate({
+    request: [
+      { name: 'reviewId', type: 'param', schema: ReviewIdParamSchema },
+    ],
+  })
+  findOne(reviewId: string) {
     return this.reviewsService.findOne(reviewId);
   }
 
   @Get(':productId')
-  findAll(
-    @Param('productId', ParseUUIDPipe) productId: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-  ) {
-    return this.reviewsService.findAll(productId, page, limit);
+  @ValidateQueryParams(ReviewsListQuerySchema)
+  @Validate({
+    request: [
+      { name: 'productId', type: 'param', schema: ReviewProductIdParamSchema },
+    ],
+  })
+  findAll(productId: string, @Query() query: ReviewsListQuery) {
+    return this.reviewsService.findAll(productId, query.page, query.limit);
   }
 
   @Patch(':reviewId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Validate({
+    request: [
+      { name: 'reviewId', type: 'param', schema: ReviewIdParamSchema },
+      {
+        type: 'body',
+        schema: UpdateReviewBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
   update(
-    @Param('reviewId', ParseUUIDPipe) reviewId: string,
-    @Body() updateReviewDto: UpdateReviewDto,
+    reviewId: string,
+    updateReviewDto: UpdateReviewBody,
     @CurrentUser() currentUser: UserPublic,
   ) {
     return this.reviewsService.update(
@@ -73,10 +105,12 @@ export class ReviewsController {
   @Delete(':reviewId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  remove(
-    @Param('reviewId', ParseUUIDPipe) reviewId: string,
-    @CurrentUser() currentUser: UserPublic,
-  ) {
+  @Validate({
+    request: [
+      { name: 'reviewId', type: 'param', schema: ReviewIdParamSchema },
+    ],
+  })
+  remove(reviewId: string, @CurrentUser() currentUser: UserPublic) {
     return this.reviewsService.remove(
       reviewId,
       currentUser.id,

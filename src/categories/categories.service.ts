@@ -1,12 +1,15 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { UpdateCategoryDto } from './dto/update-category.dto';
+import { QueryFailedError, Repository } from 'typeorm';
+import type {
+  CreateCategoryBody,
+  UpdateCategoryBody,
+} from './schemas/categories.schemas';
 import { Category } from './entities/category.entity';
 
 @Injectable()
@@ -16,19 +19,69 @@ export class CategoriesService {
     private readonly categoryRepository: Repository<Category>,
   ) {}
 
-  async create(createCategoryDto: CreateCategoryDto) {
-    const existing = await this.categoryRepository.findOne({
-      where: { slug: createCategoryDto.slug },
-    });
-    if (existing) {
-      throw new ConflictException('Category slug already exists');
+  private isSlugUniqueViolation(error: unknown): boolean {
+    if (!(error instanceof QueryFailedError)) {
+      return false;
     }
+
+    const driverError = error.driverError as {
+      code?: string;
+      constraint?: string;
+      detail?: string;
+    };
+
+    if (driverError.code !== '23505') {
+      return false;
+    }
+
+    const constraint = driverError.constraint?.toLowerCase() ?? '';
+    const detail = driverError.detail?.toLowerCase() ?? '';
+    return constraint.includes('slug') || detail.includes('(slug)');
+  }
+
+  private async resolveValidParentId(
+    parentId: string | null | undefined,
+    categoryId?: string,
+  ): Promise<string | null | undefined> {
+    if (parentId === undefined) {
+      return undefined;
+    }
+
+    if (parentId === null) {
+      return null;
+    }
+
+    if (categoryId && parentId === categoryId) {
+      throw new BadRequestException('Category cannot be its own parent');
+    }
+
+    const parentCategory = await this.categoryRepository.findOne({
+      where: { id: parentId },
+    });
+    if (!parentCategory) {
+      throw new BadRequestException('Parent category not found');
+    }
+
+    return parentId;
+  }
+
+  async create(createCategoryDto: CreateCategoryBody) {
+    const validatedParentId = await this.resolveValidParentId(
+      createCategoryDto.parentId,
+    );
 
     const category = this.categoryRepository.create({
       ...createCategoryDto,
-      parentId: createCategoryDto.parentId ?? null,
+      parentId: validatedParentId ?? null,
     });
-    return this.categoryRepository.save(category);
+    try {
+      return await this.categoryRepository.save(category);
+    } catch (error) {
+      if (this.isSlugUniqueViolation(error)) {
+        throw new ConflictException('Category slug already exists');
+      }
+      throw error;
+    }
   }
 
   async findAll() {
@@ -45,21 +98,22 @@ export class CategoriesService {
     return category;
   }
 
-  async update(id: string, updateCategoryDto: UpdateCategoryDto) {
+  async update(id: string, updateCategoryDto: UpdateCategoryBody) {
     const category = await this.findOne(id);
-    if (updateCategoryDto.slug && updateCategoryDto.slug !== category.slug) {
-      const duplicate = await this.categoryRepository.findOne({
-        where: { slug: updateCategoryDto.slug },
-      });
-      if (duplicate) {
-        throw new ConflictException('Category slug already exists');
-      }
-    }
     Object.assign(category, updateCategoryDto);
     if (updateCategoryDto.parentId !== undefined) {
-      category.parentId = updateCategoryDto.parentId ?? null;
+      category.parentId =
+        (await this.resolveValidParentId(updateCategoryDto.parentId, id)) ??
+        null;
     }
-    return this.categoryRepository.save(category);
+    try {
+      return await this.categoryRepository.save(category);
+    } catch (error) {
+      if (this.isSlugUniqueViolation(error)) {
+        throw new ConflictException('Category slug already exists');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string) {
