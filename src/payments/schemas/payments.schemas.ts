@@ -5,13 +5,28 @@ export const PaymentIdParamSchema = Type.String({
   description: 'Payment id',
 });
 
+export const PaymentMethodSchema = Type.Union([
+  Type.Literal('KASHIER'),
+  Type.Literal('CASH_ON_DELIVERY'),
+]);
+
 export const CreatePaymentBodySchema = Type.Object({
-  amount: Type.Number({ minimum: 0 }),
-  currency: Type.Optional(Type.String({ minLength: 3, maxLength: 3, default: 'EGP' })),
-  orderId: Type.Optional(Type.String({ format: 'uuid' })),
+  amount: Type.Optional(Type.Number({ minimum: 0 })),
+  currency: Type.Optional(
+    Type.String({ minLength: 3, maxLength: 3, default: 'EGP' }),
+  ),
+  orderId: Type.String({ format: 'uuid' }),
+  paymentMethod: Type.Optional(PaymentMethodSchema),
 });
 
 export type CreatePaymentBody = Static<typeof CreatePaymentBodySchema>;
+
+export const CreatePaymentResponseSchema = Type.Object({
+  message: Type.String({ minLength: 1 }),
+  paymentUrl: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+});
+
+export type CreatePaymentResponse = Static<typeof CreatePaymentResponseSchema>;
 
 export const UpdatePaymentStatusBodySchema = Type.Object({
   status: Type.Union([
@@ -23,4 +38,6 @@ export const UpdatePaymentStatusBodySchema = Type.Object({
   rawResponse: Type.Optional(Type.Any()),
 });
 
-export type UpdatePaymentStatusBody = Static<typeof UpdatePaymentStatusBodySchema>;
+export type UpdatePaymentStatusBody = Static<
+  typeof UpdatePaymentStatusBodySchema
+>;

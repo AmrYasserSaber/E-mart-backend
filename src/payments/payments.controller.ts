@@ -1,11 +1,11 @@
+import { Controller, Post, Param, UseGuards } from '@nestjs/common';
 import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Validate } from 'nestjs-typebox';
 import { PaymentsService } from './payments.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -13,20 +13,36 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserPublic } from '../users/entities/user.entity';
 import {
   CreatePaymentBodySchema,
+  CreatePaymentResponseSchema,
   PaymentIdParamSchema,
   UpdatePaymentStatusBodySchema,
   type CreatePaymentBody,
+  type CreatePaymentResponse,
   type UpdatePaymentStatusBody,
 } from './schemas/payments.schemas';
 
 @ApiTags('payments')
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) { }
+  constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create payment session' })
+  @ApiBody({
+    description: 'Create payment request',
+    examples: {
+      kashier: {
+        summary: 'Kashier payment',
+        value: {
+          orderId: 'ORDER_UUID',
+          paymentMethod: 'KASHIER',
+        },
+      },
+    },
+  })
+  @ApiCreatedResponse({ description: 'Payment session created' })
   @Validate({
     request: [
       {
@@ -35,35 +51,13 @@ export class PaymentsController {
         stripUnknownProps: true,
       },
     ],
+    response: { schema: CreatePaymentResponseSchema, stripUnknownProps: true },
   })
   create(
     createDto: CreatePaymentBody,
     @CurrentUser() currentUser: UserPublic,
-  ) {
+  ): Promise<CreatePaymentResponse> {
     return this.paymentsService.create(currentUser.id, createDto);
-  }
-
-  @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Validate({
-    request: [{ name: 'id', type: 'param', schema: PaymentIdParamSchema }],
-  })
-  findOne(
-    @Param('id') id: string,
-    @CurrentUser() currentUser: UserPublic,
-  ) {
-    return this.paymentsService.findOne(id, currentUser.id);
-  }
-
-  @Get('order/:orderId')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  findByOrderId(
-    @CurrentUser() currentUser: UserPublic,
-    @Param('orderId') orderId: string,
-  ) {
-    return this.paymentsService.findByOrderId(orderId, currentUser.id);
   }
 
   // A webhook endpoint typically doesn't use standard User-auth but rather expects a webhook signature header.
@@ -78,10 +72,7 @@ export class PaymentsController {
       },
     ],
   })
-  handleWebhook(
-    @Param('id') id: string,
-    updateDto: UpdatePaymentStatusBody,
-  ) {
+  handleWebhook(@Param('id') id: string, updateDto: UpdatePaymentStatusBody) {
     return this.paymentsService.updateStatus(id, updateDto);
   }
 }
