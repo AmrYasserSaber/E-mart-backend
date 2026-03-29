@@ -1,26 +1,77 @@
-import { Injectable } from '@nestjs/common';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Payment, PaymentStatus } from './entities/payment.entity';
+import {
+  CreatePaymentBody,
+  UpdatePaymentStatusBody,
+} from './schemas/payments.schemas';
 
 @Injectable()
 export class PaymentsService {
-  create(_createPaymentDto: CreatePaymentDto) {
-    return 'This action adds a new payment';
+  constructor(
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+  ) {}
+
+  async create(userId: string, createDto: CreatePaymentBody) {
+    const payment = this.paymentRepository.create({
+      userId,
+      amount: createDto.amount,
+      currency: createDto.currency ?? 'EGP',
+      orderId: createDto.orderId ?? null,
+      status: PaymentStatus.PENDING,
+      gateway: 'kashier',
+    });
+
+    return this.paymentRepository.save(payment);
   }
 
-  findAll() {
-    return `This action returns all payments`;
+  async findOne(id: string, userId: string) {
+    const payment = await this.paymentRepository.findOne({
+      where: { id, userId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    return payment;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} payment`;
+  async findByOrderId(orderId: string, userId: string) {
+    return this.paymentRepository.find({
+      where: { orderId, userId },
+    });
   }
 
-  update(id: number, _updatePaymentDto: UpdatePaymentDto) {
-    return `This action updates a #${id} payment`;
-  }
+  async updateStatus(
+    id: string,
+    updateDto: UpdatePaymentStatusBody,
+    userId?: string,
+  ) {
+    // If userId is provided, ensure ownership. Webhooks might bypass userId.
+    const whereClause: any = { id };
+    if (userId) {
+        whereClause.userId = userId;
+    }
 
-  remove(id: number) {
-    return `This action removes a #${id} payment`;
+    const payment = await this.paymentRepository.findOne({ where: whereClause });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    // A real implementation would verify the status transition here
+    payment.status = updateDto.status as PaymentStatus;
+    
+    if (updateDto.externalId) {
+      payment.externalId = updateDto.externalId;
+    }
+    if (updateDto.rawResponse) {
+      payment.rawResponse = updateDto.rawResponse;
+    }
+
+    return this.paymentRepository.save(payment);
   }
 }
