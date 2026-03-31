@@ -35,6 +35,11 @@ export const UserPublicSchema = Type.Object({
   lastName: LastNameSchema,
   email: EmailSchema,
   role: RoleSchema,
+  active: Type.Boolean({ description: 'Whether the account is active' }),
+  emailVerifiedAt: Type.Union(
+    [Type.String({ format: 'date-time' }), Type.Null()],
+    { description: 'Email verification timestamp, null if unverified' },
+  ),
   createdAt: Type.String({
     format: 'date-time',
     description: 'Account creation timestamp',
