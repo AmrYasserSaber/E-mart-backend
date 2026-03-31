@@ -12,6 +12,7 @@ import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { CartModule } from './cart/cart.module';
+import { WishlistModule } from './wishlist/wishlist.module';
 import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
 import { SellersModule } from './sellers/sellers.module';
@@ -36,6 +37,7 @@ import { databaseConfig } from './config/database.config';
     CategoriesModule,
     ReviewsModule,
     CartModule,
+    WishlistModule,
     PaymentsModule,
     OrdersModule,
     SellersModule,
