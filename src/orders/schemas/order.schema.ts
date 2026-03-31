@@ -26,25 +26,18 @@ export const ProductItemSchema = Type.Object({
   }),
 });
 
-export const ShippingAddressSchema = Type.Object({
-  street: Type.String({ minLength: 1, maxLength: 255 }),
-  city: Type.String({ minLength: 1, maxLength: 120 }),
-  zip: Type.String({ minLength: 1, maxLength: 20 }),
-  country: Type.String({ minLength: 1, maxLength: 120 }),
-});
-
 export const OrderStatusSchema = Type.Enum(OrderStatus, {
   description: 'Order lifecycle status',
 });
 
 export const CreateOrderBodySchema = Type.Object({
-  shippingAddress: ShippingAddressSchema,
+  addressId: UuidSchema,
 });
 
 export type CreateOrderBody = Static<typeof CreateOrderBodySchema>;
 
 export const UpdateOrderBodySchema = Type.Object({
-  shippingAddress: Type.Optional(ShippingAddressSchema),
+  addressId: UuidSchema,
 });
 
 export type UpdateOrderBody = Static<typeof UpdateOrderBodySchema>;
@@ -61,7 +54,7 @@ export const OrderResponseSchema = Type.Object({
   items: Type.Array(ProductItemSchema),
   total: Type.Number({ minimum: 0 }),
   status: OrderStatusSchema,
-  shippingAddress: ShippingAddressSchema,
+  shippingAddressId: Type.Union([UuidSchema, Type.Null()]),
   paymentIntentId: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String({ format: 'date-time' }),
   updatedAt: Type.String({ format: 'date-time' }),
@@ -107,7 +100,7 @@ export const OrderDetailsResponseSchema = Type.Object({
   items: Type.Array(OrderDetailsItemSchema),
   total: Type.Number({ minimum: 0 }),
   status: OrderStatusSchema,
-  shippingAddress: ShippingAddressSchema,
+  shippingAddressId: Type.Union([UuidSchema, Type.Null()]),
   payment: Type.Object({
     provider: Type.Literal('stripe'),
     status: Type.String({ minLength: 1 }),
