@@ -19,6 +19,7 @@ import { SellersModule } from './sellers/sellers.module';
 import { AdminModule } from './admin/admin.module';
 import { MailModule } from './mail/mail.module';
 import { UploadModule } from './upload/upload.module';
+import { AddressesModule } from './addresses/addresses.module';
 import { databaseConfig } from './config/database.config';
 
 @Module({
@@ -44,6 +45,7 @@ import { databaseConfig } from './config/database.config';
     AdminModule,
     MailModule,
     UploadModule,
+    AddressesModule,
     TypeOrmModule.forRootAsync({ useFactory: databaseConfig }),
   ],
   controllers: [AppController],
