@@ -39,6 +39,7 @@ export const OrderStatusSchema = Type.Enum(OrderStatus, {
 
 export const CreateOrderBodySchema = Type.Object({
   shippingAddress: ShippingAddressSchema,
+  paymentMethod: Type.String({ minLength: 1, maxLength: 50 }),
 });
 
 export type CreateOrderBody = Static<typeof CreateOrderBodySchema>;
@@ -62,6 +63,7 @@ export const OrderResponseSchema = Type.Object({
   total: Type.Number({ minimum: 0 }),
   status: OrderStatusSchema,
   shippingAddress: ShippingAddressSchema,
+  paymentMethod: Type.String(),
   paymentIntentId: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String({ format: 'date-time' }),
   updatedAt: Type.String({ format: 'date-time' }),
@@ -109,6 +111,7 @@ export const OrderDetailsResponseSchema = Type.Object({
   status: OrderStatusSchema,
   shippingAddress: ShippingAddressSchema,
   payment: Type.Object({
+    method: Type.String(),
     provider: Type.Literal('stripe'),
     status: Type.String({ minLength: 1 }),
   }),

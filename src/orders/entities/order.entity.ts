@@ -59,6 +59,9 @@ export class Order {
   @Column({ type: 'jsonb' })
   shippingAddress!: ShippingAddress;
 
+  @Column({ type: 'varchar' })
+  paymentMethod!: string;
+
   @Column({ type: 'varchar', nullable: true })
   paymentIntentId!: string | null;
 
@@ -73,6 +76,7 @@ export interface OrderPublic {
   total: number;
   status: OrderStatus;
   shippingAddress: ShippingAddress;
+  paymentMethod: string;
   paymentIntentId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -86,6 +90,7 @@ export function toOrderPublic(order: Order): OrderPublic {
     total: Number(order.total),
     status: order.status,
     shippingAddress: order.shippingAddress,
+    paymentMethod: order.paymentMethod,
     paymentIntentId: order.paymentIntentId,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),

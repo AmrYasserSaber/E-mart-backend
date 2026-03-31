@@ -46,6 +46,7 @@ export class OrdersService {
       status: order.status,
       shippingAddress: order.shippingAddress,
       payment: {
+        method: order.paymentMethod,
         provider: 'stripe',
         status: order.paymentIntentId ? 'paid' : 'pending',
       },
@@ -66,6 +67,7 @@ export class OrdersService {
       items,
       total,
       shippingAddress: this.sanitizeAddress(createOrderDto.shippingAddress),
+      paymentMethod: createOrderDto.paymentMethod,
       paymentIntentId: null,
     });
 
