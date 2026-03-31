@@ -9,6 +9,7 @@ import {
 } from './schemas/order.schema';
 import { Role } from '../common/enums/role.enum';
 import { CartService } from '../cart/cart.service';
+import { AddressesService } from '../addresses/addresses.service';
 
 @Injectable()
 export class OrdersService {
@@ -16,19 +17,11 @@ export class OrdersService {
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
     private readonly cartService: CartService,
+    private readonly addressesService: AddressesService,
   ) {}
 
   private normalizeOrder(order: Order): OrderPublic {
     return toOrderPublic(order);
-  }
-
-  private sanitizeAddress(address: Order['shippingAddress']) {
-    return {
-      street: address.street.trim(),
-      city: address.city.trim(),
-      zip: address.zip.trim(),
-      country: address.country.trim(),
-    };
   }
 
   private toOrderDetails(order: Order): OrderDetailsResponse {
@@ -44,7 +37,7 @@ export class OrdersService {
       })),
       total: Number(order.total),
       status: order.status,
-      shippingAddress: order.shippingAddress,
+      shippingAddressId: order.shippingAddressId,
       payment: {
         method: order.paymentMethod,
         provider: 'stripe',
@@ -58,16 +51,20 @@ export class OrdersService {
     userId: string,
     createOrderDto: CreateOrderDto,
   ): Promise<OrderPublic> {
+    await this.addressesService.assertAddressExistsForUser(
+      userId,
+      createOrderDto.addressId,
+    );
     const cartSummary = await this.cartService.getCartSummary(userId);
     const items = cartSummary.items;
     const total = cartSummary.total;
-
     const order = this.orderRepository.create({
       userId,
       items,
       total,
       shippingAddress: this.sanitizeAddress(createOrderDto.shippingAddress),
       paymentMethod: createOrderDto.paymentMethod,
+      shippingAddressId: createOrderDto.addressId,
       paymentIntentId: null,
     });
 
