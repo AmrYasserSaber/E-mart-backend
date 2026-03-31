@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import {
@@ -87,9 +92,29 @@ export class AdminService {
     }
 
     if (roleChanged && dto.role !== undefined) {
+      if (user.role === Role.ADMIN && dto.role !== Role.ADMIN) {
+        const adminCount = await this.userRepository.count({
+          where: { role: Role.ADMIN, active: true },
+        });
+        if (adminCount <= 1) {
+          throw new BadRequestException(
+            'Cannot change the role of the last active admin.',
+          );
+        }
+      }
       user.role = dto.role;
     }
     if (activeChanged) {
+      if (user.role === Role.ADMIN && dto.active === false) {
+        const activeAdminCount = await this.userRepository.count({
+          where: { role: Role.ADMIN, active: true },
+        });
+        if (activeAdminCount <= 1) {
+          throw new BadRequestException(
+            'Cannot deactivate the last active admin.',
+          );
+        }
+      }
       user.active = dto.active as boolean;
     }
 
@@ -111,6 +136,16 @@ export class AdminService {
       }
     }
 
+    return toUserPublic(saved);
+  }
+
+  async verifyUser(id: string) {
+    const user = await this.getUserEntity(id);
+    if (user.emailVerifiedAt) {
+      return toUserPublic(user);
+    }
+    user.emailVerifiedAt = new Date();
+    const saved = await this.userRepository.save(user);
     return toUserPublic(saved);
   }
 

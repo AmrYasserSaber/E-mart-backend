@@ -56,6 +56,8 @@ export interface UserPublic {
   lastName: string;
   email: string;
   role: Role;
+  active: boolean;
+  emailVerifiedAt: string | null;
   createdAt: string;
 }
 
@@ -66,6 +68,10 @@ export function toUserPublic(user: User): UserPublic {
     lastName: user.lastName,
     email: user.email,
     role: user.role,
+    active: user.active,
+    emailVerifiedAt: user.emailVerifiedAt
+      ? user.emailVerifiedAt.toISOString()
+      : null,
     createdAt: user.createdAt
       ? user.createdAt.toISOString()
       : new Date(0).toISOString(),

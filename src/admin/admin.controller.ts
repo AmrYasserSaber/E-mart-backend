@@ -84,6 +84,16 @@ export class AdminController {
     return this.adminService.manageUser(id, dto);
   }
 
+  @Patch('users/:id/verify')
+  @ApiOperation({ summary: 'Manually verify user email (admin)' })
+  @ApiParam({ name: 'id', type: String })
+  @Validate({
+    response: { schema: ManageUserResponseSchema, stripUnknownProps: true },
+  })
+  verifyUser(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.adminService.verifyUser(id);
+  }
+
   @Get('orders')
   @ApiOperation({ summary: 'List all orders (admin)' })
   @ValidateQueryParams(ListAdminOrdersQuerySchema)
