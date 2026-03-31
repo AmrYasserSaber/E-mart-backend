@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity';
+import { UserCard } from './entities/user-card.entity';
 import { Order } from '../orders/entities/order.entity';
 import { KashierProvider } from './providers/kashier.provider';
 import {
@@ -19,6 +20,8 @@ export class PaymentsService {
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(UserCard)
+    private readonly userCardRepository: Repository<UserCard>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
     private readonly kashierProvider: KashierProvider,
@@ -131,5 +134,40 @@ export class PaymentsService {
     }
 
     return this.paymentRepository.save(payment);
+  }
+
+  async listCards(userId: string) {
+    return this.userCardRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async saveCard(userId: string, cardData: any) {
+    // Mocking brand detection and tokenization
+    const last4 = cardData.cardNumber.slice(-4);
+    const brand = cardData.cardNumber.startsWith('4') ? 'Visa' : 'MasterCard';
+
+    const card = this.userCardRepository.create({
+      userId,
+      brand,
+      last4,
+      expMonth: cardData.expiryMonth,
+      expYear: cardData.expiryYear,
+      cardholderName: cardData.cardholderName,
+      isDefault: false,
+    });
+
+    return this.userCardRepository.save(card);
+  }
+
+  async deleteCard(userId: string, cardId: string) {
+    const card = await this.userCardRepository.findOne({
+      where: { id: cardId, userId },
+    });
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+    return this.userCardRepository.remove(card);
   }
 }
