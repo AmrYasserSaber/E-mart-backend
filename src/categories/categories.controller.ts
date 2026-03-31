@@ -2,21 +2,45 @@ import {
   Controller,
   Get,
   Post,
-  Body,
   Patch,
-  Param,
   Delete,
+  UseGuards,
+  Put,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Validate } from 'nestjs-typebox';
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { UpdateCategoryDto } from './dto/update-category.dto';
+import {
+  CategoryIdParamSchema,
+  CreateCategoryBodySchema,
+  UpdateCategoryBodySchema,
+  type CreateCategoryBody,
+  type UpdateCategoryBody,
+} from './schemas/categories.schemas';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
 
+@ApiTags('categories')
 @Controller('categories')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post()
-  create(@Body() createCategoryDto: CreateCategoryDto) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @Validate({
+    request: [
+      {
+        type: 'body',
+        schema: CreateCategoryBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  create(createCategoryDto: CreateCategoryBody) {
     return this.categoriesService.create(createCategoryDto);
   }
 
@@ -25,21 +49,50 @@ export class CategoriesController {
     return this.categoriesService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.categoriesService.findOne(+id);
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @Validate({
+    request: [
+      { name: 'id', type: 'param', schema: CategoryIdParamSchema },
+      {
+        type: 'body',
+        schema: UpdateCategoryBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  replace(id: string, updateCategoryDto: UpdateCategoryBody) {
+    return this.categoriesService.update(id, updateCategoryDto);
   }
 
   @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateCategoryDto: UpdateCategoryDto,
-  ) {
-    return this.categoriesService.update(+id, updateCategoryDto);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @Validate({
+    request: [
+      { name: 'id', type: 'param', schema: CategoryIdParamSchema },
+      {
+        type: 'body',
+        schema: UpdateCategoryBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  update(id: string, updateCategoryDto: UpdateCategoryBody) {
+    return this.categoriesService.update(id, updateCategoryDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.categoriesService.remove(+id);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @Validate({
+    request: [{ name: 'id', type: 'param', schema: CategoryIdParamSchema }],
+  })
+  remove(id: string) {
+    return this.categoriesService.remove(id);
   }
 }

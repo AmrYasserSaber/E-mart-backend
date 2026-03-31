@@ -1,1 +1,3 @@
-export class CreateSellerDto {}
+import type { RegisterSellerBody } from '../schemas/seller.schema';
+
+export type CreateSellerDto = RegisterSellerBody;

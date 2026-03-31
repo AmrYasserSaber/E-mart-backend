@@ -1,4 +1,3 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateOrderDto } from './create-order.dto';
+import type { UpdateOrderBody } from '../schemas/order.schema';
 
-export class UpdateOrderDto extends PartialType(CreateOrderDto) {}
+export type UpdateOrderDto = UpdateOrderBody;
