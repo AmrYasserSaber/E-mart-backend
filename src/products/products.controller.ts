@@ -1,5 +1,8 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
+  Param,
   Get,
   Post,
   Patch,
@@ -7,50 +10,107 @@ import {
   Query,
   UseGuards,
   Put,
+  ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Validate } from 'nestjs-typebox';
 import { ProductsService } from './products.service';
 import {
-  CreateProductBodySchema,
   ProductFilterQuerySchema,
   ProductIdParamSchema,
-  UpdateProductBodySchema,
   type CreateProductBody,
   type ProductFilterQuery,
   type UpdateProductBody,
 } from './schemas/products.schemas';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../common/enums/role.enum';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserPublic } from '../users/entities/user.entity';
 import { ValidateQueryParams } from '../common/decorators/validate-query-params.decorator';
+import { UploadFile } from '../upload/upload.service';
 
 @ApiTags('products')
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
+  private parseRequiredNumber(raw: unknown, field: string): number {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) {
+      throw new BadRequestException(`${field} must be a valid number`);
+    }
+    return value;
+  }
+
+  private parseOptionalNumber(raw: unknown): number | undefined {
+    if (raw === undefined || raw === null || raw === '') {
+      return undefined;
+    }
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  private parseCreateBody(body: Record<string, unknown>): CreateProductBody {
+    const title = String(body['title'] ?? '').trim();
+    const description = String(body['description'] ?? '').trim();
+    const categoryId = String(body['categoryId'] ?? '').trim();
+
+    if (!title || !description || !categoryId) {
+      throw new BadRequestException(
+        'title, description and categoryId are required',
+      );
+    }
+
+    return {
+      title,
+      description,
+      categoryId,
+      price: this.parseRequiredNumber(body['price'], 'price'),
+      stock: this.parseRequiredNumber(body['stock'], 'stock'),
+      images: [],
+      ratingAvg: this.parseOptionalNumber(body['ratingAvg']),
+      ratingCount: this.parseOptionalNumber(body['ratingCount']),
+      sellerId:
+        body['sellerId'] === undefined || body['sellerId'] === null
+          ? undefined
+          : String(body['sellerId']),
+    };
+  }
+
+  private parseUpdateBody(body: Record<string, unknown>): UpdateProductBody {
+    const dto: UpdateProductBody = {};
+
+    if (body['title'] !== undefined) dto.title = String(body['title']);
+    if (body['description'] !== undefined)
+      dto.description = String(body['description']);
+    if (body['categoryId'] !== undefined)
+      dto.categoryId = String(body['categoryId']);
+    if (body['price'] !== undefined)
+      dto.price = this.parseRequiredNumber(body['price'], 'price');
+    if (body['stock'] !== undefined)
+      dto.stock = this.parseRequiredNumber(body['stock'], 'stock');
+
+    return dto;
+  }
+
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Validate({
-    request: [
-      {
-        type: 'body',
-        schema: CreateProductBodySchema,
-        stripUnknownProps: true,
-      },
-    ],
-  })
+  @UseInterceptors(FilesInterceptor('images', 10))
   create(
-    createProductDto: CreateProductBody,
+    @Body() body: Record<string, unknown>,
+    @UploadedFiles() files: UploadFile[] = [],
     @CurrentUser() currentUser: UserPublic,
   ) {
-    return this.productsService.create(createProductDto, currentUser.id);
+    const createProductDto = this.parseCreateBody(body);
+    return this.productsService.create(
+      createProductDto,
+      currentUser.id,
+      files,
+      currentUser.role,
+    );
   }
 
   @Get()
@@ -63,62 +123,60 @@ export class ProductsController {
   @Validate({
     request: [{ name: 'id', type: 'param', schema: ProductIdParamSchema }],
   })
-  findOne(id: string) {
+  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.productsService.findOne(id);
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Validate({
-    request: [
-      { name: 'id', type: 'param', schema: ProductIdParamSchema },
-      {
-        type: 'body',
-        schema: UpdateProductBodySchema,
-        stripUnknownProps: true,
-      },
-    ],
-  })
+  @UseInterceptors(FilesInterceptor('images', 10))
   replace(
-    id: string,
-    updateProductDto: UpdateProductBody,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: Record<string, unknown>,
+    @UploadedFiles() files: UploadFile[] = [],
     @CurrentUser() currentUser: UserPublic,
   ) {
-    return this.productsService.update(id, updateProductDto, currentUser.id);
+    const updateProductDto = this.parseUpdateBody(body);
+    return this.productsService.update(
+      id,
+      updateProductDto,
+      currentUser.id,
+      files,
+      currentUser.role,
+    );
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Validate({
-    request: [
-      { name: 'id', type: 'param', schema: ProductIdParamSchema },
-      {
-        type: 'body',
-        schema: UpdateProductBodySchema,
-        stripUnknownProps: true,
-      },
-    ],
-  })
+  @UseInterceptors(FilesInterceptor('images', 10))
   update(
-    id: string,
-    updateProductDto: UpdateProductBody,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: Record<string, unknown>,
+    @UploadedFiles() files: UploadFile[] = [],
     @CurrentUser() currentUser: UserPublic,
   ) {
-    return this.productsService.update(id, updateProductDto, currentUser.id);
+    const updateProductDto = this.parseUpdateBody(body);
+    return this.productsService.update(
+      id,
+      updateProductDto,
+      currentUser.id,
+      files,
+      currentUser.role,
+    );
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Validate({
     request: [{ name: 'id', type: 'param', schema: ProductIdParamSchema }],
   })
-  remove(id: string, @CurrentUser() currentUser: UserPublic) {
-    return this.productsService.remove(id, currentUser.id);
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() currentUser: UserPublic,
+  ) {
+    return this.productsService.remove(id, currentUser.id, currentUser.role);
   }
 }

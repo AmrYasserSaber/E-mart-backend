@@ -15,6 +15,8 @@ import { Product } from './entities/product.entity';
 import { Category } from '../categories/entities/category.entity';
 import { getPagination } from '../common/utils/pagination.utils';
 import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
+import { UploadFile, UploadService } from '../upload/upload.service';
+import { Role } from '../common/enums/role.enum';
 
 @Injectable()
 export class ProductsService {
@@ -25,6 +27,7 @@ export class ProductsService {
     private readonly categoryRepository: Repository<Category>,
     @InjectRepository(Seller)
     private readonly sellerRepository: Repository<Seller>,
+    private readonly uploadService: UploadService,
   ) {}
 
   private async ensureSellerCanManageProducts(sellerUserId: string) {
@@ -33,7 +36,9 @@ export class ProductsService {
     });
 
     if (!seller) {
-      throw new ForbiddenException('Seller profile not found');
+      // Legacy accounts may already have seller role without a seller profile row.
+      // Allow them to manage products using role-based access only.
+      return;
     }
 
     if (seller.status !== SellerStatus.APPROVED) {
@@ -47,13 +52,32 @@ export class ProductsService {
     return product;
   }
 
-  async create(createProductDto: CreateProductBody, sellerId?: string) {
+  private async uploadProductImages(
+    productId: string,
+    files: UploadFile[],
+  ): Promise<string[]> {
+    const uploaded = await this.uploadService.uploadImages(
+      files,
+      `/emart/products/${productId}`,
+    );
+
+    return uploaded.map((item) => item.url);
+  }
+
+  async create(
+    createProductDto: CreateProductBody,
+    sellerId?: string,
+    files: UploadFile[] = [],
+    actorRole: Role = Role.SELLER,
+  ) {
     const assignedSellerId = sellerId ?? createProductDto.sellerId;
     if (!assignedSellerId) {
       throw new BadRequestException('Seller id is required');
     }
 
-    await this.ensureSellerCanManageProducts(assignedSellerId);
+    if (actorRole !== Role.ADMIN) {
+      await this.ensureSellerCanManageProducts(assignedSellerId);
+    }
 
     const category = await this.categoryRepository.findOne({
       where: { id: createProductDto.categoryId },
@@ -65,10 +89,18 @@ export class ProductsService {
     const product = this.productRepository.create({
       ...createProductDto,
       sellerId: assignedSellerId,
+      images: createProductDto.images ?? [],
       ratingAvg: createProductDto.ratingAvg ?? 0,
       ratingCount: createProductDto.ratingCount ?? 0,
     });
-    const saved = await this.productRepository.save(product);
+    let saved = await this.productRepository.save(product);
+
+    if (files.length) {
+      const uploadedUrls = await this.uploadProductImages(saved.id, files);
+      saved.images = uploadedUrls;
+      saved = await this.productRepository.save(saved);
+    }
+
     return this.toApiProduct(saved);
   }
 
@@ -125,21 +157,39 @@ export class ProductsService {
     return this.toApiProduct(product);
   }
 
+  async findOneOwnedBySeller(id: string, sellerId: string) {
+    const product = await this.productRepository.findOne({
+      where: { id, sellerId },
+      relations: {
+        category: true,
+        reviews: true,
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    return this.toApiProduct(product);
+  }
+
   async update(
     id: string,
     updateProductDto: UpdateProductBody,
     sellerId?: string,
+    files: UploadFile[] = [],
+    actorRole: Role = Role.SELLER,
   ) {
     const product = await this.productRepository.findOne({ where: { id } });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
-    if (sellerId && product.sellerId !== sellerId) {
+    if (actorRole !== Role.ADMIN && sellerId && product.sellerId !== sellerId) {
       throw new BadRequestException('You can only update your own products');
     }
 
-    if (sellerId) {
+    if (actorRole !== Role.ADMIN && sellerId) {
       await this.ensureSellerCanManageProducts(sellerId);
     }
 
@@ -153,19 +203,25 @@ export class ProductsService {
     }
 
     Object.assign(product, updateProductDto);
+
+    if (files.length) {
+      const uploadedUrls = await this.uploadProductImages(product.id, files);
+      product.images = uploadedUrls;
+    }
+
     const updated = await this.productRepository.save(product);
     return this.toApiProduct(updated);
   }
 
-  async remove(id: string, sellerId?: string) {
+  async remove(id: string, sellerId?: string, actorRole: Role = Role.SELLER) {
     const product = await this.productRepository.findOne({ where: { id } });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
-    if (sellerId && product.sellerId !== sellerId) {
+    if (actorRole !== Role.ADMIN && sellerId && product.sellerId !== sellerId) {
       throw new BadRequestException('You can only delete your own products');
     }
-    if (sellerId) {
+    if (actorRole !== Role.ADMIN && sellerId) {
       await this.ensureSellerCanManageProducts(sellerId);
     }
     await this.productRepository.remove(product);

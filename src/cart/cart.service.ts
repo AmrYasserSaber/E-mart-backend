@@ -129,6 +129,7 @@ export class CartService {
 
     const items = cart.items.map((item) => ({
       productId: item.productId,
+      sellerId: item.product.sellerId,
       title: item.product.title,
       qty: item.quantity,
       price: item.product.price,
