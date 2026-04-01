@@ -2,7 +2,6 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -93,14 +92,10 @@ export class SellersService {
     page: number,
     limit: number,
   ): Promise<SellerOwnProductsResponse> {
-    const seller = await this.sellerRepository.findOne({ where: { userId } });
-    if (!seller) {
-      throw new ForbiddenException('Current user is not a seller');
-    }
-
     const start = (page - 1) * limit;
     const [products, total] = await this.productRepository.findAndCount({
       where: { sellerId: userId },
+      relations: { category: true },
       order: { createdAt: 'DESC' },
       skip: start,
       take: limit,
@@ -108,11 +103,25 @@ export class SellersService {
 
     const data = products.map((product) => ({
       id: product.id,
+      sellerId: product.sellerId,
+      categoryId: product.categoryId,
       title: product.title,
+      description: product.description,
       price: Number(product.price),
       stock: product.stock,
+      images: product.images ?? [],
       ratingAvg: Number(product.ratingAvg ?? 0),
+      ratingCount: product.ratingCount ?? 0,
       ordersCount: 0,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString(),
+      category: product.category
+        ? {
+            id: product.category.id,
+            name: product.category.name,
+            slug: product.category.slug,
+          }
+        : undefined,
     }));
 
     return {

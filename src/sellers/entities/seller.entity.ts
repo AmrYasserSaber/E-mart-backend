@@ -5,8 +5,10 @@ import {
   CreateDateColumn,
   OneToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { Product } from '../../products/entities/product.entity';
 
 export enum SellerStatus {
   PENDING = 'pending',
@@ -37,6 +39,9 @@ export class Seller {
 
   @Column({ type: 'float', default: 0 })
   rating!: number;
+
+  @OneToMany(() => Product, (product) => product.seller)
+  products!: Product[];
 
   @CreateDateColumn()
   createdAt!: Date;
