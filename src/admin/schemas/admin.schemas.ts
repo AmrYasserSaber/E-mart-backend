@@ -142,3 +142,31 @@ export const ListPendingSellersResponseSchema = Type.Object({
 export type ListPendingSellersResponse = Static<
   typeof ListPendingSellersResponseSchema
 >;
+
+export const RevenueAnalyticsQuerySchema = Type.Object({
+  period: Type.Optional(
+    Type.Union([Type.Literal('12m'), Type.Literal('7d')], {
+      description:
+        'Analytics range: 12m (last 12 months) or 7d (last 7 days)',
+    }),
+  ),
+});
+
+export type RevenueAnalyticsQuery = Static<typeof RevenueAnalyticsQuerySchema>;
+
+export const RevenueAnalyticsPointSchema = Type.Object({
+  key: Type.String({ minLength: 1 }),
+  label: Type.String({ minLength: 1 }),
+  revenue: Type.Number({ minimum: 0 }),
+});
+
+export const RevenueAnalyticsResponseSchema = Type.Object({
+  period: Type.Union([Type.Literal('12m'), Type.Literal('7d')]),
+  currency: Type.String({ minLength: 3, maxLength: 3 }),
+  totalRevenue: Type.Number({ minimum: 0 }),
+  data: Type.Array(RevenueAnalyticsPointSchema),
+});
+
+export type RevenueAnalyticsResponse = Static<
+  typeof RevenueAnalyticsResponseSchema
+>;

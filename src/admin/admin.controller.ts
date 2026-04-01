@@ -39,6 +39,10 @@ import {
   ListPendingSellersQuerySchema,
   type ListPendingSellersQuery,
   ListPendingSellersResponseSchema,
+  RevenueAnalyticsQuerySchema,
+  type RevenueAnalyticsQuery,
+  RevenueAnalyticsResponseSchema,
+  type RevenueAnalyticsResponse,
 } from './schemas/admin.schemas';
 import { UserPublicSchema } from '../users/schemas/user.schema';
 
@@ -148,5 +152,21 @@ export class AdminController {
   })
   listPendingSellers(@Query() query: ListPendingSellersQuery) {
     return this.adminService.listPendingSellers(query);
+  }
+
+  @Get('analytics/revenue')
+  @ApiOperation({ summary: 'Revenue analytics from successful payments' })
+  @ValidateQueryParams(RevenueAnalyticsQuerySchema)
+  @Validate({
+    response: {
+      schema: RevenueAnalyticsResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  revenueAnalytics(
+    @Query() query: RevenueAnalyticsQuery,
+  ): Promise<RevenueAnalyticsResponse> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    return this.adminService.getRevenueAnalytics(query);
   }
 }
