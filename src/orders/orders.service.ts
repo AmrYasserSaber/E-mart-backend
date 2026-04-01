@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order, OrderPublic, toOrderPublic } from './entities/order.entity';
+import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import {
   OrderDetailsResponse,
   OrdersListResponse,
@@ -16,6 +17,8 @@ export class OrdersService {
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
     private readonly cartService: CartService,
     private readonly addressesService: AddressesService,
   ) {}
@@ -24,7 +27,28 @@ export class OrdersService {
     return toOrderPublic(order);
   }
 
-  private toOrderDetails(order: Order): OrderDetailsResponse {
+  private async toOrderDetails(order: Order): Promise<OrderDetailsResponse> {
+    const latestPayment = await this.paymentRepository.findOne({
+      where: { orderId: order.id },
+      order: { createdAt: 'DESC' },
+    });
+
+    const provider: 'kashier' | 'cash_on_delivery' =
+      latestPayment?.gateway === 'cash_on_delivery' ||
+      order.paymentMethod === 'CASH_ON_DELIVERY'
+        ? 'cash_on_delivery'
+        : 'kashier';
+
+    const paymentStatus = latestPayment
+      ? latestPayment.status === PaymentStatus.SUCCESS
+        ? 'paid'
+        : latestPayment.status === PaymentStatus.FAILED
+          ? 'failed'
+          : 'pending'
+      : order.paymentIntentId
+        ? 'paid'
+        : 'pending';
+
     return {
       id: order.id,
       items: order.items.map((item) => ({
@@ -54,11 +78,8 @@ export class OrdersService {
         : null,
       payment: {
         method: order.paymentMethod,
-        provider:
-          order.paymentMethod === 'CASH_ON_DELIVERY'
-            ? 'cash_on_delivery'
-            : 'kashier',
-        status: order.paymentIntentId ? 'paid' : 'pending',
+        provider,
+        status: paymentStatus,
       },
       createdAt: order.createdAt.toISOString(),
     };

@@ -4,12 +4,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity';
 import { UserCard } from './entities/user-card.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
 import { KashierProvider } from './providers/kashier.provider';
+import { SaveCardBody } from './schemas/card.schemas';
 import {
   CreatePaymentBody,
   CreatePaymentResponse,
@@ -105,7 +106,7 @@ export class PaymentsService {
       gateway: 'kashier',
       externalId: kashier.externalId ?? null,
       redirectUrl: kashier.redirectUrl,
-      rawResponse: kashier.raw,
+      rawResponse: (kashier.raw as Record<string, unknown>) ?? null,
     });
 
     await this.paymentRepository.save(payment);
@@ -122,7 +123,7 @@ export class PaymentsService {
     userId?: string,
   ) {
     // If userId is provided, ensure ownership. Webhooks might bypass userId.
-    const whereClause: any = { id };
+    const whereClause: FindOptionsWhere<Payment> = { id };
     if (userId) {
       whereClause.userId = userId;
     }
@@ -144,7 +145,7 @@ export class PaymentsService {
       payment.externalId = updateDto.externalId;
     }
     if (updateDto.rawResponse) {
-      payment.rawResponse = updateDto.rawResponse;
+      payment.rawResponse = updateDto.rawResponse as Record<string, unknown>;
     }
 
     const saved = await this.paymentRepository.save(payment);
@@ -182,21 +183,30 @@ export class PaymentsService {
     updateDto: UpdatePaymentStatusBody,
   ) {
     const payment = await this.paymentRepository.findOne({
-      where: { orderId },
+      where: { orderId, status: PaymentStatus.PENDING },
       order: { createdAt: 'DESC' },
     });
 
-    if (!payment) {
+    const resolvedPayment =
+      payment ??
+      (await this.paymentRepository.findOne({
+        where: { orderId },
+        order: { createdAt: 'DESC' },
+      }));
+
+    if (!resolvedPayment) {
       throw new NotFoundException('Payment not found');
     }
 
-    return this.updateStatus(payment.id, updateDto);
+    return this.updateStatus(resolvedPayment.id, updateDto);
   }
 
   private normalizeStatus(value: string): PaymentStatus {
-    const normalized = value?.toString().trim().toUpperCase();
-    if (normalized === PaymentStatus.SUCCESS) return PaymentStatus.SUCCESS;
-    if (normalized === PaymentStatus.FAILED) return PaymentStatus.FAILED;
+    const normalized = value?.toString().trim().toUpperCase() ?? '';
+    if (normalized === 'SUCCESS' || normalized === 'PAID') {
+      return PaymentStatus.SUCCESS;
+    }
+    if (normalized === 'FAILED') return PaymentStatus.FAILED;
     return PaymentStatus.PENDING;
   }
 
@@ -207,15 +217,15 @@ export class PaymentsService {
     });
   }
 
-  async saveCard(userId: string, cardData: any) {
+  async saveCard(userId: string, cardData: SaveCardBody) {
     if (!cardData?.last4 || !cardData?.brand) {
       throw new BadRequestException('Card token data is incomplete');
     }
 
     const card = this.userCardRepository.create({
       userId,
-      brand: cardData.brand,
-      last4: cardData.last4,
+      brand: String(cardData.brand),
+      last4: String(cardData.last4),
       expMonth: cardData.expiryMonth,
       expYear: cardData.expiryYear,
       cardholderName: cardData.cardholderName,

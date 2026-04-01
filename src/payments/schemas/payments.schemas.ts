@@ -45,3 +45,11 @@ export const UpdatePaymentStatusBodySchema = Type.Object({
 export type UpdatePaymentStatusBody = Static<
   typeof UpdatePaymentStatusBodySchema
 >;
+
+export const KashierWebhookBodySchema = Type.Object({
+  event: Type.Optional(Type.String({ minLength: 1 })),
+  data: Type.Optional(Type.Any()),
+  hash: Type.Optional(Type.String({ minLength: 1 })),
+});
+
+export type KashierWebhookBody = Static<typeof KashierWebhookBodySchema>;

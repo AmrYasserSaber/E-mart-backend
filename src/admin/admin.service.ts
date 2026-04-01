@@ -24,6 +24,7 @@ import {
 import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
 import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
+import { Address } from '../addresses/entities/address.entity';
 
 @Injectable()
 export class AdminService {
@@ -173,24 +174,50 @@ export class AdminService {
     const [orders, total] = await this.orderRepository.findAndCount({
       where,
       order: { createdAt: 'DESC' },
+      relations: ['shippingAddress'],
       skip,
       take: limit,
     });
 
     return {
-      data: orders.map((order) => ({
-        id: order.id,
-        userId: order.userId,
-        items: order.items,
-        total: Number(order.total),
-        status: order.status,
-        shippingAddress: order.shippingAddress,
-        paymentMethod: order.paymentMethod,
-        shippingAddressId: order.shippingAddressId,
-        paymentIntentId: order.paymentIntentId,
-        createdAt: order.createdAt.toISOString(),
-        updatedAt: order.updatedAt.toISOString(),
-      })),
+      data: orders.map((order) => {
+        const shippingAddress: Address | null = order.shippingAddress;
+
+        const serializedShippingAddress = shippingAddress
+          ? {
+              id: shippingAddress.id,
+              label: shippingAddress.label,
+              firstName: shippingAddress.firstName,
+              lastName: shippingAddress.lastName,
+              phone: shippingAddress.phone,
+              street: shippingAddress.street,
+              city: shippingAddress.city,
+              isPrimary: shippingAddress.isPrimary,
+              createdAt:
+                shippingAddress.createdAt instanceof Date
+                  ? shippingAddress.createdAt.toISOString()
+                  : String(shippingAddress.createdAt),
+              updatedAt:
+                shippingAddress.updatedAt instanceof Date
+                  ? shippingAddress.updatedAt.toISOString()
+                  : String(shippingAddress.updatedAt),
+            }
+          : null;
+
+        return {
+          id: order.id,
+          userId: order.userId,
+          items: order.items,
+          total: Number(order.total),
+          status: order.status,
+          shippingAddress: serializedShippingAddress,
+          paymentMethod: order.paymentMethod,
+          shippingAddressId: serializedShippingAddress?.id ?? null,
+          paymentIntentId: order.paymentIntentId,
+          createdAt: order.createdAt.toISOString(),
+          updatedAt: order.updatedAt.toISOString(),
+        };
+      }),
       total,
       page,
       limit,

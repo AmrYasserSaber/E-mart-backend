@@ -1,13 +1,23 @@
 import { env } from './env';
 
-export const kashierConfig = () => {
+export interface KashierConfig {
+  baseUrl: string;
+  apiKey: string;
+  secretKey: string;
+  merchantId: string;
+  webhookUrl: string;
+  webhookSecret: string;
+  redirectUrl: string;
+}
+
+export const kashierConfig = (): KashierConfig => {
   return {
-    baseUrl: env.KASHIER_URL,
-    apiKey: env.KASHIER_API_KEY,
-    secretKey: env.KASHIER_SECRET_KEY,
-    merchantId: env.KASHIER_MERCHANT_ID,
-    webhookUrl: env.KASHIER_WEBHOOK_URL,
-    webhookSecret: env.KASHIER_WEBHOOK_SECRET,
-    redirectUrl: env.KASHIER_REDIRECT_URL,
+    baseUrl: String(env.KASHIER_URL),
+    apiKey: String(env.KASHIER_API_KEY),
+    secretKey: String(env.KASHIER_SECRET_KEY),
+    merchantId: String(env.KASHIER_MERCHANT_ID),
+    webhookUrl: String(env.KASHIER_WEBHOOK_URL),
+    webhookSecret: String(env.KASHIER_WEBHOOK_SECRET),
+    redirectUrl: String(env.KASHIER_REDIRECT_URL),
   };
 };

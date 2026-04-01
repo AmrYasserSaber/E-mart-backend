@@ -63,13 +63,77 @@ function mapCardToResponse(card: UserCard): CardResponse {
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  private safeEqualHex(left: string, right: string): boolean {
+    const leftBuffer = Buffer.from(left, 'hex');
+    const rightBuffer = Buffer.from(right, 'hex');
+    if (leftBuffer.length !== rightBuffer.length) return false;
+    return timingSafeEqual(leftBuffer, rightBuffer);
+  }
+
+  private toSignatureString(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint'
+    ) {
+      return `${value}`;
+    }
+    if (this.isRecord(value) || Array.isArray(value)) {
+      return JSON.stringify(value);
+    }
+    return '';
+  }
+
+  private verifyKashierDataSignature(
+    signature: string,
+    body: unknown,
+    secret: string,
+  ): boolean {
+    const bodyRecord = this.isRecord(body) ? body : null;
+    if (!bodyRecord) return false;
+
+    const data = bodyRecord.data;
+    if (!this.isRecord(data)) return false;
+
+    const record = data;
+    const signatureKeysRaw = record.signatureKeys;
+    const signatureKeys = Array.isArray(signatureKeysRaw)
+      ? signatureKeysRaw.filter((k): k is string => typeof k === 'string')
+      : [];
+
+    if (signatureKeys.length === 0) return false;
+
+    const sortedKeys = [...signatureKeys].sort((a, b) => a.localeCompare(b));
+    const payload = new URLSearchParams();
+    for (const key of sortedKeys) {
+      payload.set(key, this.toSignatureString(record[key]));
+    }
+
+    const expected = createHmac('sha256', secret)
+      .update(payload.toString())
+      .digest('hex');
+
+    return this.safeEqualHex(signature, expected);
+  }
+
   private verifyWebhookSignature(
     req: Request & { rawBody?: Buffer },
     secret: string,
+    body?: unknown,
   ) {
     const signature = req.header('x-kashier-signature');
     if (!signature) {
       throw new UnauthorizedException('Missing webhook signature');
+    }
+
+    if (body && this.verifyKashierDataSignature(signature, body, secret)) {
+      return;
     }
 
     const rawBody = req.rawBody?.toString('utf8') ?? '';
@@ -77,17 +141,13 @@ export class PaymentsController {
       throw new BadRequestException('Webhook raw body missing');
     }
 
-    const expected = createHmac('sha256', secret)
-      .update(rawBody)
-      .digest('hex');
+    if (!/^[a-f0-9]+$/i.test(signature)) {
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
 
-    const signatureBuffer = Buffer.from(signature, 'hex');
-    const expectedBuffer = Buffer.from(expected, 'hex');
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
 
-    if (
-      signatureBuffer.length !== expectedBuffer.length ||
-      !timingSafeEqual(signatureBuffer, expectedBuffer)
-    ) {
+    if (!this.safeEqualHex(signature, expected)) {
       throw new UnauthorizedException('Invalid webhook signature');
     }
   }
@@ -132,48 +192,71 @@ export class PaymentsController {
 
   // A webhook endpoint typically doesn't use standard User-auth but rather expects a webhook signature header.
   @Post('webhook')
-  @Validate({
-    request: [
-      {
-        type: 'body',
-        schema: UpdatePaymentStatusBodySchema,
-        stripUnknownProps: true,
-      },
-    ],
-  })
   handleKashierWebhook(
+    @Body() payload: unknown,
     @Req() req: Request & { rawBody?: Buffer },
-    @Body() updateDto: UpdatePaymentStatusBody,
   ) {
     const config = kashierConfig();
-    const webhookSecret = config.webhookSecret || config.secretKey;
+    const webhookSecret =
+      config.webhookSecret || config.apiKey || config.secretKey;
     if (!webhookSecret) {
       throw new UnauthorizedException('Webhook secret not configured');
     }
 
-    this.verifyWebhookSignature(req, webhookSecret);
+    this.verifyWebhookSignature(req, webhookSecret, payload);
 
-    const normalizedDto: UpdatePaymentStatusBody = {
-      ...updateDto,
-      externalId: updateDto.externalId || updateDto.transactionId,
-      status: updateDto.status,
+    const payloadRecord: Record<string, unknown> = this.isRecord(payload)
+      ? payload
+      : {};
+    const bodyData: Record<string, unknown> = this.isRecord(payloadRecord.data)
+      ? payloadRecord.data
+      : {};
+
+    const normalize = (value: unknown): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
     };
+
+    const normalizeStatus = (
+      value: unknown,
+    ): UpdatePaymentStatusBody['status'] => {
+      const normalized = normalize(value)?.toUpperCase();
+      if (normalized === 'SUCCESS' || normalized === 'PAID') return 'SUCCESS';
+      if (normalized === 'FAILED') return 'FAILED';
+      return 'PENDING';
+    };
+
+    const normalizedDto = {
+      status: normalizeStatus(bodyData.status ?? payloadRecord.status),
+      externalId:
+        normalize(bodyData.transactionId) ||
+        normalize(bodyData.kashierOrderId) ||
+        normalize(payloadRecord.transactionId),
+      transactionId:
+        normalize(bodyData.transactionId) ||
+        normalize(payloadRecord.transactionId),
+      orderId:
+        normalize(bodyData.merchantOrderId) || normalize(bodyData.orderId),
+      rawResponse: payloadRecord,
+    } satisfies UpdatePaymentStatusBody;
 
     if (normalizedDto.externalId) {
       return this.paymentsService.updateStatusByExternalId(
         normalizedDto.externalId,
-        normalizedDto,
+        normalizedDto as UpdatePaymentStatusBody,
       );
     }
 
-    if (updateDto.orderId) {
-      return this.paymentsService.updateStatusByOrderId(
-        updateDto.orderId,
-        normalizedDto,
-      );
+    const orderId =
+      normalize(bodyData.merchantOrderId) || normalize(bodyData.orderId);
+    if (orderId) {
+      return this.paymentsService.updateStatusByOrderId(orderId, normalizedDto);
     }
 
-    throw new BadRequestException('Missing externalId or orderId in webhook payload');
+    throw new BadRequestException(
+      'Missing externalId or orderId in webhook payload',
+    );
   }
 
   @Post(':id/webhook')
@@ -188,9 +271,9 @@ export class PaymentsController {
     ],
   })
   handleWebhook(
-    @Req() req: Request & { rawBody?: Buffer },
     @Param('id') id: string,
     @Body() updateDto: UpdatePaymentStatusBody,
+    @Req() req: Request & { rawBody?: Buffer },
   ) {
     const config = kashierConfig();
     const webhookSecret = config.webhookSecret || config.secretKey;
@@ -208,7 +291,9 @@ export class PaymentsController {
   @Validate({
     response: { schema: CardsListResponseSchema, stripUnknownProps: true },
   })
-  async listCards(@CurrentUser() currentUser: UserPublic): Promise<CardsListResponse> {
+  async listCards(
+    @CurrentUser() currentUser: UserPublic,
+  ): Promise<CardsListResponse> {
     const cards = await this.paymentsService.listCards(currentUser.id);
     return cards.map(mapCardToResponse);
   }
