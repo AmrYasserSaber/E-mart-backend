@@ -11,7 +11,6 @@ export const PaymentMethodSchema = Type.Union([
 ]);
 
 export const CreatePaymentBodySchema = Type.Object({
-  amount: Type.Optional(Type.Number({ minimum: 0 })),
   currency: Type.Optional(
     Type.String({ minLength: 3, maxLength: 3, default: 'EGP' }),
   ),
@@ -33,11 +32,24 @@ export const UpdatePaymentStatusBodySchema = Type.Object({
     Type.Literal('PENDING'),
     Type.Literal('SUCCESS'),
     Type.Literal('FAILED'),
+    Type.Literal('pending'),
+    Type.Literal('success'),
+    Type.Literal('failed'),
   ]),
-  externalId: Type.Optional(Type.String()),
+  externalId: Type.Optional(Type.String({ minLength: 1 })),
+  transactionId: Type.Optional(Type.String({ minLength: 1 })),
+  orderId: Type.Optional(Type.String({ format: 'uuid' })),
   rawResponse: Type.Optional(Type.Any()),
 });
 
 export type UpdatePaymentStatusBody = Static<
   typeof UpdatePaymentStatusBodySchema
 >;
+
+export const KashierWebhookBodySchema = Type.Object({
+  event: Type.Optional(Type.String({ minLength: 1 })),
+  data: Type.Optional(Type.Any()),
+  hash: Type.Optional(Type.String({ minLength: 1 })),
+});
+
+export type KashierWebhookBody = Static<typeof KashierWebhookBodySchema>;

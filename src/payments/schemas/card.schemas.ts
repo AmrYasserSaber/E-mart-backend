@@ -2,10 +2,11 @@ import { Type, Static } from '@sinclair/typebox';
 
 export const SaveCardBodySchema = Type.Object({
   cardholderName: Type.String({ minLength: 2, maxLength: 50 }),
-  cardNumber: Type.String({ minLength: 16, maxLength: 16, pattern: '^[0-9]+$' }),
+  brand: Type.String({ minLength: 1, maxLength: 20 }),
+  last4: Type.String({ minLength: 4, maxLength: 4, pattern: '^[0-9]+$' }),
   expiryMonth: Type.Integer({ minimum: 1, maximum: 12 }),
   expiryYear: Type.Integer({ minimum: new Date().getFullYear(), maximum: 2040 }),
-  cvv: Type.String({ minLength: 3, maxLength: 4, pattern: '^[0-9]+$' }),
+  paymentToken: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 export type SaveCardBody = Static<typeof SaveCardBodySchema>;

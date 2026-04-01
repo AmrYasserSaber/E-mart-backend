@@ -7,7 +7,11 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Address } from '../../addresses/entities/address.entity';
+import {
+  Address,
+  AddressPublic,
+  toAddressPublic,
+} from '../../addresses/entities/address.entity';
 import { User } from '../../users/entities/user.entity';
 
 export enum OrderStatus {
@@ -79,7 +83,7 @@ export interface OrderPublic {
   items: OrderProductItem[];
   total: number;
   status: OrderStatus;
-  shippingAddress: ShippingAddress;
+  shippingAddress: AddressPublic | null;
   paymentMethod: string;
   shippingAddressId: string | null;
   paymentIntentId: string | null;
@@ -94,7 +98,9 @@ export function toOrderPublic(order: Order): OrderPublic {
     items: order.items,
     total: Number(order.total),
     status: order.status,
-    shippingAddress: order.shippingAddress,
+    shippingAddress: order.shippingAddress
+      ? toAddressPublic(order.shippingAddress)
+      : null,
     paymentMethod: order.paymentMethod,
     shippingAddressId: order.shippingAddressId,
     paymentIntentId: order.paymentIntentId,

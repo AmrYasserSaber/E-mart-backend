@@ -4,11 +4,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity';
 import { UserCard } from './entities/user-card.entity';
 import { Order } from '../orders/entities/order.entity';
+import { OrderStatus } from '../orders/entities/order.entity';
 import { KashierProvider } from './providers/kashier.provider';
+import { SaveCardBody } from './schemas/card.schemas';
 import {
   CreatePaymentBody,
   CreatePaymentResponse,
@@ -40,6 +42,7 @@ export class PaymentsService {
   async create(
     userId: string,
     createDto: CreatePaymentBody,
+    userEmail: string,
   ): Promise<CreatePaymentResponse> {
     const paymentMethod = createDto.paymentMethod ?? 'KASHIER';
     if (!createDto.orderId) {
@@ -47,14 +50,22 @@ export class PaymentsService {
     }
 
     const order = await this.getUserOrderOrThrow(createDto.orderId, userId);
-    const orderAmount = Number(order.total);
-    const resolvedAmount =
-      createDto.amount !== undefined ? Number(createDto.amount) : orderAmount;
+    const resolvedAmount = Number(order.total);
 
-    if (resolvedAmount !== orderAmount) {
-      throw new BadRequestException(
-        'Payment amount does not match order total',
-      );
+    if (order.status === OrderStatus.CONFIRMED) {
+      throw new BadRequestException('Order is already paid');
+    }
+
+    const existingPayment = await this.paymentRepository.findOne({
+      where: { orderId: createDto.orderId, status: PaymentStatus.PENDING },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (existingPayment) {
+      return {
+        message: 'Payment session already exists.',
+        paymentUrl: existingPayment.redirectUrl,
+      };
     }
 
     const currency = createDto.currency ?? 'EGP';
@@ -83,6 +94,7 @@ export class PaymentsService {
       orderId: createDto.orderId,
       amount: resolvedAmount,
       currency,
+      customerEmail: userEmail,
     });
 
     const payment = this.paymentRepository.create({
@@ -94,7 +106,7 @@ export class PaymentsService {
       gateway: 'kashier',
       externalId: kashier.externalId ?? null,
       redirectUrl: kashier.redirectUrl,
-      rawResponse: kashier.raw,
+      rawResponse: (kashier.raw as Record<string, unknown>) ?? null,
     });
 
     await this.paymentRepository.save(payment);
@@ -111,7 +123,7 @@ export class PaymentsService {
     userId?: string,
   ) {
     // If userId is provided, ensure ownership. Webhooks might bypass userId.
-    const whereClause: any = { id };
+    const whereClause: FindOptionsWhere<Payment> = { id };
     if (userId) {
       whereClause.userId = userId;
     }
@@ -124,16 +136,78 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // A real implementation would verify the status transition here
-    payment.status = updateDto.status as PaymentStatus;
+    if (payment.status !== PaymentStatus.PENDING) {
+      return payment;
+    }
+
+    payment.status = this.normalizeStatus(updateDto.status);
     if (updateDto.externalId) {
       payment.externalId = updateDto.externalId;
     }
     if (updateDto.rawResponse) {
-      payment.rawResponse = updateDto.rawResponse;
+      payment.rawResponse = updateDto.rawResponse as Record<string, unknown>;
     }
 
-    return this.paymentRepository.save(payment);
+    const saved = await this.paymentRepository.save(payment);
+
+    if (saved.status === PaymentStatus.SUCCESS && saved.orderId) {
+      await this.orderRepository.update(
+        { id: saved.orderId },
+        {
+          status: OrderStatus.CONFIRMED,
+          paymentIntentId: saved.externalId ?? null,
+        },
+      );
+    }
+
+    return saved;
+  }
+
+  async updateStatusByExternalId(
+    externalId: string,
+    updateDto: UpdatePaymentStatusBody,
+  ) {
+    const payment = await this.paymentRepository.findOne({
+      where: { externalId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    return this.updateStatus(payment.id, updateDto);
+  }
+
+  async updateStatusByOrderId(
+    orderId: string,
+    updateDto: UpdatePaymentStatusBody,
+  ) {
+    const payment = await this.paymentRepository.findOne({
+      where: { orderId, status: PaymentStatus.PENDING },
+      order: { createdAt: 'DESC' },
+    });
+
+    const resolvedPayment =
+      payment ??
+      (await this.paymentRepository.findOne({
+        where: { orderId },
+        order: { createdAt: 'DESC' },
+      }));
+
+    if (!resolvedPayment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    return this.updateStatus(resolvedPayment.id, updateDto);
+  }
+
+  private normalizeStatus(value: string): PaymentStatus {
+    const normalized = value?.toString().trim().toUpperCase() ?? '';
+    if (normalized === 'SUCCESS' || normalized === 'PAID') {
+      return PaymentStatus.SUCCESS;
+    }
+    if (normalized === 'FAILED') return PaymentStatus.FAILED;
+    return PaymentStatus.PENDING;
   }
 
   async listCards(userId: string) {
@@ -143,15 +217,15 @@ export class PaymentsService {
     });
   }
 
-  async saveCard(userId: string, cardData: any) {
-    // Mocking brand detection and tokenization
-    const last4 = cardData.cardNumber.slice(-4);
-    const brand = cardData.cardNumber.startsWith('4') ? 'Visa' : 'MasterCard';
+  async saveCard(userId: string, cardData: SaveCardBody) {
+    if (!cardData?.last4 || !cardData?.brand) {
+      throw new BadRequestException('Card token data is incomplete');
+    }
 
     const card = this.userCardRepository.create({
       userId,
-      brand,
-      last4,
+      brand: String(cardData.brand),
+      last4: String(cardData.last4),
       expMonth: cardData.expiryMonth,
       expYear: cardData.expiryYear,
       cardholderName: cardData.cardholderName,

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order, OrderPublic, toOrderPublic } from './entities/order.entity';
+import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import {
   OrderDetailsResponse,
   OrdersListResponse,
@@ -16,6 +17,8 @@ export class OrdersService {
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
     private readonly cartService: CartService,
     private readonly addressesService: AddressesService,
   ) {}
@@ -24,7 +27,28 @@ export class OrdersService {
     return toOrderPublic(order);
   }
 
-  private toOrderDetails(order: Order): OrderDetailsResponse {
+  private async toOrderDetails(order: Order): Promise<OrderDetailsResponse> {
+    const latestPayment = await this.paymentRepository.findOne({
+      where: { orderId: order.id },
+      order: { createdAt: 'DESC' },
+    });
+
+    const provider: 'kashier' | 'cash_on_delivery' =
+      latestPayment?.gateway === 'cash_on_delivery' ||
+      order.paymentMethod === 'CASH_ON_DELIVERY'
+        ? 'cash_on_delivery'
+        : 'kashier';
+
+    const paymentStatus = latestPayment
+      ? latestPayment.status === PaymentStatus.SUCCESS
+        ? 'paid'
+        : latestPayment.status === PaymentStatus.FAILED
+          ? 'failed'
+          : 'pending'
+      : order.paymentIntentId
+        ? 'paid'
+        : 'pending';
+
     return {
       id: order.id,
       items: order.items.map((item) => ({
@@ -38,10 +62,24 @@ export class OrdersService {
       total: Number(order.total),
       status: order.status,
       shippingAddressId: order.shippingAddressId,
+      shippingAddress: order.shippingAddress
+        ? {
+            id: order.shippingAddress.id,
+            label: order.shippingAddress.label,
+            firstName: order.shippingAddress.firstName,
+            lastName: order.shippingAddress.lastName,
+            phone: order.shippingAddress.phone,
+            street: order.shippingAddress.street,
+            city: order.shippingAddress.city,
+            isPrimary: order.shippingAddress.isPrimary,
+            createdAt: order.shippingAddress.createdAt.toISOString(),
+            updatedAt: order.shippingAddress.updatedAt.toISOString(),
+          }
+        : null,
       payment: {
         method: order.paymentMethod,
-        provider: 'stripe',
-        status: order.paymentIntentId ? 'paid' : 'pending',
+        provider,
+        status: paymentStatus,
       },
       createdAt: order.createdAt.toISOString(),
     };
@@ -62,15 +100,18 @@ export class OrdersService {
       userId,
       items,
       total,
-      shippingAddress: this.sanitizeAddress(createOrderDto.shippingAddress),
       paymentMethod: createOrderDto.paymentMethod,
       shippingAddressId: createOrderDto.addressId,
       paymentIntentId: null,
     });
 
     const saved = await this.orderRepository.save(order);
+    const hydrated = await this.orderRepository.findOne({
+      where: { id: saved.id },
+      relations: ['shippingAddress'],
+    });
     await this.cartService.clearCart(userId);
-    return this.normalizeOrder(saved);
+    return this.normalizeOrder(hydrated ?? saved);
   }
 
   async findAllForUser(
@@ -104,7 +145,10 @@ export class OrdersService {
     role: Role,
   ): Promise<OrderDetailsResponse | null> {
     const where = role === Role.ADMIN ? { id } : { id, userId };
-    const order = await this.orderRepository.findOne({ where });
+    const order = await this.orderRepository.findOne({
+      where,
+      relations: ['shippingAddress'],
+    });
     if (!order) return null;
     return this.toOrderDetails(order);
   }

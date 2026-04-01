@@ -35,5 +35,6 @@ export const env = cleanEnv(process.env, {
   KASHIER_SECRET_KEY: str({ default: '' }),
   KASHIER_MERCHANT_ID: str({ default: '' }),
   KASHIER_WEBHOOK_URL: str({ default: '' }),
+  KASHIER_WEBHOOK_SECRET: str({ default: '' }),
   KASHIER_REDIRECT_URL: str({ default: '' }),
 });
