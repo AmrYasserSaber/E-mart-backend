@@ -119,13 +119,6 @@ export class UsersService {
       user.lastName = data.lastName.trim();
     }
 
-    if (data.email !== undefined && data.email.trim() !== '') {
-      const normalizedEmail = this.normalizeEmail(data.email);
-      if (normalizedEmail && normalizedEmail !== user.email) {
-        user.email = normalizedEmail;
-      }
-    }
-
     try {
       return await this.userRepository.save(user);
     } catch (error) {
