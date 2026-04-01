@@ -9,6 +9,7 @@ import {
   Req,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import type { Request } from 'express';
@@ -68,10 +69,46 @@ export class PaymentsController {
   }
 
   private safeEqualHex(left: string, right: string): boolean {
+    if (!/^[a-f0-9]+$/i.test(left) || !/^[a-f0-9]+$/i.test(right)) {
+      return false;
+    }
     const leftBuffer = Buffer.from(left, 'hex');
     const rightBuffer = Buffer.from(right, 'hex');
     if (leftBuffer.length !== rightBuffer.length) return false;
     return timingSafeEqual(leftBuffer, rightBuffer);
+  }
+
+  private buildQueryString(
+    record: Record<string, unknown>,
+    keys: string[],
+    encodeSpacesAsPlus: boolean,
+  ): string {
+    return keys
+      .map((key) => {
+        const rawValue = this.toSignatureString(record[key]);
+        const encodedKey = encodeURIComponent(key);
+        const encodedValue = encodeURIComponent(rawValue);
+        if (encodeSpacesAsPlus) {
+          return `${encodedKey.replace(/%20/g, '+')}=${encodedValue.replace(/%20/g, '+')}`;
+        }
+        return `${encodedKey}=${encodedValue}`;
+      })
+      .join('&');
+  }
+
+  private getSignatureCandidates(req: Request, body?: unknown): string[] {
+    const signatures: string[] = [];
+    const headerSignature = req.header('x-kashier-signature');
+    if (headerSignature) signatures.push(headerSignature);
+
+    if (this.isRecord(body)) {
+      const hash = body.hash;
+      if (typeof hash === 'string' && hash.trim().length > 0) {
+        signatures.push(hash.trim());
+      }
+    }
+
+    return [...new Set(signatures)];
   }
 
   private toSignatureString(value: unknown): string {
@@ -91,9 +128,9 @@ export class PaymentsController {
   }
 
   private verifyKashierDataSignature(
-    signature: string,
+    signatures: string[],
     body: unknown,
-    secret: string,
+    secrets: string[],
   ): boolean {
     const bodyRecord = this.isRecord(body) ? body : null;
     if (!bodyRecord) return false;
@@ -110,29 +147,47 @@ export class PaymentsController {
     if (signatureKeys.length === 0) return false;
 
     const sortedKeys = [...signatureKeys].sort((a, b) => a.localeCompare(b));
-    const payload = new URLSearchParams();
+    const payloadWithPlus = new URLSearchParams();
     for (const key of sortedKeys) {
-      payload.set(key, this.toSignatureString(record[key]));
+      payloadWithPlus.set(key, this.toSignatureString(record[key]));
     }
 
-    const expected = createHmac('sha256', secret)
-      .update(payload.toString())
-      .digest('hex');
+    const payloadStrict = this.buildQueryString(record, sortedKeys, false);
+    const payloadPlus = payloadWithPlus.toString();
+    const payloadCustomPlus = this.buildQueryString(record, sortedKeys, true);
+    const payloadCandidates = [payloadPlus, payloadStrict, payloadCustomPlus];
 
-    return this.safeEqualHex(signature, expected);
+    for (const secret of secrets) {
+      for (const payloadCandidate of payloadCandidates) {
+        const expected = createHmac('sha256', secret)
+          .update(payloadCandidate)
+          .digest('hex');
+
+        if (
+          signatures.some((signature) => this.safeEqualHex(signature, expected))
+        ) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   private verifyWebhookSignature(
     req: Request & { rawBody?: Buffer },
-    secret: string,
+    secrets: string[],
     body?: unknown,
   ) {
-    const signature = req.header('x-kashier-signature');
-    if (!signature) {
+    const signatureCandidates = this.getSignatureCandidates(req, body);
+    if (signatureCandidates.length === 0) {
       throw new UnauthorizedException('Missing webhook signature');
     }
 
-    if (body && this.verifyKashierDataSignature(signature, body, secret)) {
+    if (
+      body &&
+      this.verifyKashierDataSignature(signatureCandidates, body, secrets)
+    ) {
       return;
     }
 
@@ -141,13 +196,26 @@ export class PaymentsController {
       throw new BadRequestException('Webhook raw body missing');
     }
 
-    if (!/^[a-f0-9]+$/i.test(signature)) {
-      throw new UnauthorizedException('Invalid webhook signature');
+    for (const secret of secrets) {
+      const expected = createHmac('sha256', secret)
+        .update(rawBody)
+        .digest('hex');
+      if (
+        signatureCandidates.some((signature) =>
+          this.safeEqualHex(signature, expected),
+        )
+      ) {
+        return;
+      }
     }
 
-    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+    if (body && this.isRecord(body) && this.isRecord(body.data)) {
+      throw new UnauthorizedException(
+        'Invalid webhook signature. Check KASHIER_WEBHOOK_SECRET value and signing format.',
+      );
+    }
 
-    if (!this.safeEqualHex(signature, expected)) {
+    {
       throw new UnauthorizedException('Invalid webhook signature');
     }
   }
@@ -192,18 +260,24 @@ export class PaymentsController {
 
   // A webhook endpoint typically doesn't use standard User-auth but rather expects a webhook signature header.
   @Post('webhook')
-  handleKashierWebhook(
+  async handleKashierWebhook(
     @Body() payload: unknown,
     @Req() req: Request & { rawBody?: Buffer },
   ) {
     const config = kashierConfig();
-    const webhookSecret =
-      config.webhookSecret || config.apiKey || config.secretKey;
-    if (!webhookSecret) {
+    const secretCandidates = [
+      config.webhookSecret,
+      config.apiKey,
+      config.secretKey,
+    ]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value));
+
+    if (secretCandidates.length === 0) {
       throw new UnauthorizedException('Webhook secret not configured');
     }
 
-    this.verifyWebhookSignature(req, webhookSecret, payload);
+    this.verifyWebhookSignature(req, secretCandidates, payload);
 
     const payloadRecord: Record<string, unknown> = this.isRecord(payload)
       ? payload
@@ -242,10 +316,16 @@ export class PaymentsController {
     } satisfies UpdatePaymentStatusBody;
 
     if (normalizedDto.externalId) {
-      return this.paymentsService.updateStatusByExternalId(
-        normalizedDto.externalId,
-        normalizedDto as UpdatePaymentStatusBody,
-      );
+      try {
+        return await this.paymentsService.updateStatusByExternalId(
+          normalizedDto.externalId,
+          normalizedDto as UpdatePaymentStatusBody,
+        );
+      } catch (error) {
+        if (!(error instanceof NotFoundException)) {
+          throw error;
+        }
+      }
     }
 
     const orderId =
@@ -280,7 +360,7 @@ export class PaymentsController {
     if (!webhookSecret) {
       throw new UnauthorizedException('Webhook secret not configured');
     }
-    this.verifyWebhookSignature(req, webhookSecret);
+    this.verifyWebhookSignature(req, [webhookSecret]);
     return this.paymentsService.updateStatus(id, updateDto);
   }
 
