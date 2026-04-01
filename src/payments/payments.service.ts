@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity';
 import { UserCard } from './entities/user-card.entity';
 import { Order } from '../orders/entities/order.entity';
+import { OrderStatus } from '../orders/entities/order.entity';
 import { KashierProvider } from './providers/kashier.provider';
 import {
   CreatePaymentBody,
@@ -40,6 +41,7 @@ export class PaymentsService {
   async create(
     userId: string,
     createDto: CreatePaymentBody,
+    userEmail: string,
   ): Promise<CreatePaymentResponse> {
     const paymentMethod = createDto.paymentMethod ?? 'KASHIER';
     if (!createDto.orderId) {
@@ -47,14 +49,22 @@ export class PaymentsService {
     }
 
     const order = await this.getUserOrderOrThrow(createDto.orderId, userId);
-    const orderAmount = Number(order.total);
-    const resolvedAmount =
-      createDto.amount !== undefined ? Number(createDto.amount) : orderAmount;
+    const resolvedAmount = Number(order.total);
 
-    if (resolvedAmount !== orderAmount) {
-      throw new BadRequestException(
-        'Payment amount does not match order total',
-      );
+    if (order.status === OrderStatus.CONFIRMED) {
+      throw new BadRequestException('Order is already paid');
+    }
+
+    const existingPayment = await this.paymentRepository.findOne({
+      where: { orderId: createDto.orderId, status: PaymentStatus.PENDING },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (existingPayment) {
+      return {
+        message: 'Payment session already exists.',
+        paymentUrl: existingPayment.redirectUrl,
+      };
     }
 
     const currency = createDto.currency ?? 'EGP';
@@ -83,6 +93,7 @@ export class PaymentsService {
       orderId: createDto.orderId,
       amount: resolvedAmount,
       currency,
+      customerEmail: userEmail,
     });
 
     const payment = this.paymentRepository.create({
@@ -124,8 +135,11 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // A real implementation would verify the status transition here
-    payment.status = updateDto.status as PaymentStatus;
+    if (payment.status !== PaymentStatus.PENDING) {
+      return payment;
+    }
+
+    payment.status = this.normalizeStatus(updateDto.status);
     if (updateDto.externalId) {
       payment.externalId = updateDto.externalId;
     }
@@ -133,7 +147,57 @@ export class PaymentsService {
       payment.rawResponse = updateDto.rawResponse;
     }
 
-    return this.paymentRepository.save(payment);
+    const saved = await this.paymentRepository.save(payment);
+
+    if (saved.status === PaymentStatus.SUCCESS && saved.orderId) {
+      await this.orderRepository.update(
+        { id: saved.orderId },
+        {
+          status: OrderStatus.CONFIRMED,
+          paymentIntentId: saved.externalId ?? null,
+        },
+      );
+    }
+
+    return saved;
+  }
+
+  async updateStatusByExternalId(
+    externalId: string,
+    updateDto: UpdatePaymentStatusBody,
+  ) {
+    const payment = await this.paymentRepository.findOne({
+      where: { externalId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    return this.updateStatus(payment.id, updateDto);
+  }
+
+  async updateStatusByOrderId(
+    orderId: string,
+    updateDto: UpdatePaymentStatusBody,
+  ) {
+    const payment = await this.paymentRepository.findOne({
+      where: { orderId },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    return this.updateStatus(payment.id, updateDto);
+  }
+
+  private normalizeStatus(value: string): PaymentStatus {
+    const normalized = value?.toString().trim().toUpperCase();
+    if (normalized === PaymentStatus.SUCCESS) return PaymentStatus.SUCCESS;
+    if (normalized === PaymentStatus.FAILED) return PaymentStatus.FAILED;
+    return PaymentStatus.PENDING;
   }
 
   async listCards(userId: string) {
@@ -144,14 +208,14 @@ export class PaymentsService {
   }
 
   async saveCard(userId: string, cardData: any) {
-    // Mocking brand detection and tokenization
-    const last4 = cardData.cardNumber.slice(-4);
-    const brand = cardData.cardNumber.startsWith('4') ? 'Visa' : 'MasterCard';
+    if (!cardData?.last4 || !cardData?.brand) {
+      throw new BadRequestException('Card token data is incomplete');
+    }
 
     const card = this.userCardRepository.create({
       userId,
-      brand,
-      last4,
+      brand: cardData.brand,
+      last4: cardData.last4,
       expMonth: cardData.expiryMonth,
       expYear: cardData.expiryYear,
       cardholderName: cardData.cardholderName,

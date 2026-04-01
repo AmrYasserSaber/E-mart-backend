@@ -7,6 +7,7 @@ export const kashierConfig = () => {
     secretKey: env.KASHIER_SECRET_KEY,
     merchantId: env.KASHIER_MERCHANT_ID,
     webhookUrl: env.KASHIER_WEBHOOK_URL,
+    webhookSecret: env.KASHIER_WEBHOOK_SECRET,
     redirectUrl: env.KASHIER_REDIRECT_URL,
   };
 };

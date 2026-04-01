@@ -6,7 +6,12 @@ import {
   Param,
   UseGuards,
   ParseUUIDPipe,
+  Req,
+  UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
+import type { Request } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -37,6 +42,7 @@ import {
   type CardResponse,
 } from './schemas/card.schemas';
 import { UserCard } from './entities/user-card.entity';
+import { kashierConfig } from '../config/kashier.config';
 
 function mapCardToResponse(card: UserCard): CardResponse {
   return {
@@ -56,6 +62,35 @@ function mapCardToResponse(card: UserCard): CardResponse {
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
+
+  private verifyWebhookSignature(
+    req: Request & { rawBody?: Buffer },
+    secret: string,
+  ) {
+    const signature = req.header('x-kashier-signature');
+    if (!signature) {
+      throw new UnauthorizedException('Missing webhook signature');
+    }
+
+    const rawBody = req.rawBody?.toString('utf8') ?? '';
+    if (!rawBody) {
+      throw new BadRequestException('Webhook raw body missing');
+    }
+
+    const expected = createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+
+    const signatureBuffer = Buffer.from(signature, 'hex');
+    const expectedBuffer = Buffer.from(expected, 'hex');
+
+    if (
+      signatureBuffer.length !== expectedBuffer.length ||
+      !timingSafeEqual(signatureBuffer, expectedBuffer)
+    ) {
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -88,10 +123,59 @@ export class PaymentsController {
     createDto: CreatePaymentBody,
     @CurrentUser() currentUser: UserPublic,
   ): Promise<CreatePaymentResponse> {
-    return this.paymentsService.create(currentUser.id, createDto);
+    return this.paymentsService.create(
+      currentUser.id,
+      createDto,
+      currentUser.email,
+    );
   }
 
   // A webhook endpoint typically doesn't use standard User-auth but rather expects a webhook signature header.
+  @Post('webhook')
+  @Validate({
+    request: [
+      {
+        type: 'body',
+        schema: UpdatePaymentStatusBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
+  })
+  handleKashierWebhook(
+    @Req() req: Request & { rawBody?: Buffer },
+    @Body() updateDto: UpdatePaymentStatusBody,
+  ) {
+    const config = kashierConfig();
+    const webhookSecret = config.webhookSecret || config.secretKey;
+    if (!webhookSecret) {
+      throw new UnauthorizedException('Webhook secret not configured');
+    }
+
+    this.verifyWebhookSignature(req, webhookSecret);
+
+    const normalizedDto: UpdatePaymentStatusBody = {
+      ...updateDto,
+      externalId: updateDto.externalId || updateDto.transactionId,
+      status: updateDto.status,
+    };
+
+    if (normalizedDto.externalId) {
+      return this.paymentsService.updateStatusByExternalId(
+        normalizedDto.externalId,
+        normalizedDto,
+      );
+    }
+
+    if (updateDto.orderId) {
+      return this.paymentsService.updateStatusByOrderId(
+        updateDto.orderId,
+        normalizedDto,
+      );
+    }
+
+    throw new BadRequestException('Missing externalId or orderId in webhook payload');
+  }
+
   @Post(':id/webhook')
   @Validate({
     request: [
@@ -103,7 +187,17 @@ export class PaymentsController {
       },
     ],
   })
-  handleWebhook(@Param('id') id: string, updateDto: UpdatePaymentStatusBody) {
+  handleWebhook(
+    @Req() req: Request & { rawBody?: Buffer },
+    @Param('id') id: string,
+    @Body() updateDto: UpdatePaymentStatusBody,
+  ) {
+    const config = kashierConfig();
+    const webhookSecret = config.webhookSecret || config.secretKey;
+    if (!webhookSecret) {
+      throw new UnauthorizedException('Webhook secret not configured');
+    }
+    this.verifyWebhookSignature(req, webhookSecret);
     return this.paymentsService.updateStatus(id, updateDto);
   }
 

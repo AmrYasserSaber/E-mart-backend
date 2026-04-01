@@ -48,6 +48,7 @@ export class KashierProvider {
     orderId: string;
     amount: number;
     currency: string;
+    customerEmail: string;
   }): Promise<{ redirectUrl: string; externalId?: string; raw: any }> {
     if (
       !this.config.baseUrl ||
@@ -72,7 +73,7 @@ export class KashierProvider {
       merchantRedirect,
       serverWebhook: this.config.webhookUrl || undefined,
       customer: {
-        email: 'customer@example.com',
+        email: params.customerEmail,
         reference: params.orderId,
       },
     };

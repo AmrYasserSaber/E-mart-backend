@@ -38,9 +38,26 @@ export class OrdersService {
       total: Number(order.total),
       status: order.status,
       shippingAddressId: order.shippingAddressId,
+      shippingAddress: order.shippingAddress
+        ? {
+            id: order.shippingAddress.id,
+            label: order.shippingAddress.label,
+            firstName: order.shippingAddress.firstName,
+            lastName: order.shippingAddress.lastName,
+            phone: order.shippingAddress.phone,
+            street: order.shippingAddress.street,
+            city: order.shippingAddress.city,
+            isPrimary: order.shippingAddress.isPrimary,
+            createdAt: order.shippingAddress.createdAt.toISOString(),
+            updatedAt: order.shippingAddress.updatedAt.toISOString(),
+          }
+        : null,
       payment: {
         method: order.paymentMethod,
-        provider: 'stripe',
+        provider:
+          order.paymentMethod === 'CASH_ON_DELIVERY'
+            ? 'cash_on_delivery'
+            : 'kashier',
         status: order.paymentIntentId ? 'paid' : 'pending',
       },
       createdAt: order.createdAt.toISOString(),
@@ -62,15 +79,18 @@ export class OrdersService {
       userId,
       items,
       total,
-      shippingAddress: this.sanitizeAddress(createOrderDto.shippingAddress),
       paymentMethod: createOrderDto.paymentMethod,
       shippingAddressId: createOrderDto.addressId,
       paymentIntentId: null,
     });
 
     const saved = await this.orderRepository.save(order);
+    const hydrated = await this.orderRepository.findOne({
+      where: { id: saved.id },
+      relations: ['shippingAddress'],
+    });
     await this.cartService.clearCart(userId);
-    return this.normalizeOrder(saved);
+    return this.normalizeOrder(hydrated ?? saved);
   }
 
   async findAllForUser(
@@ -104,7 +124,10 @@ export class OrdersService {
     role: Role,
   ): Promise<OrderDetailsResponse | null> {
     const where = role === Role.ADMIN ? { id } : { id, userId };
-    const order = await this.orderRepository.findOne({ where });
+    const order = await this.orderRepository.findOne({
+      where,
+      relations: ['shippingAddress'],
+    });
     if (!order) return null;
     return this.toOrderDetails(order);
   }
