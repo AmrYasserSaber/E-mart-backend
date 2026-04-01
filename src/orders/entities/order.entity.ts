@@ -63,6 +63,9 @@ export class Order {
   @JoinColumn({ name: 'shippingAddressId' })
   shippingAddress!: Address | null;
 
+  @Column({ type: 'varchar' })
+  paymentMethod!: string;
+
   @Column({ type: 'varchar', nullable: true })
   paymentIntentId!: string | null;
 
@@ -76,6 +79,8 @@ export interface OrderPublic {
   items: OrderProductItem[];
   total: number;
   status: OrderStatus;
+  shippingAddress: ShippingAddress;
+  paymentMethod: string;
   shippingAddressId: string | null;
   paymentIntentId: string | null;
   createdAt: string;
@@ -89,6 +94,8 @@ export function toOrderPublic(order: Order): OrderPublic {
     items: order.items,
     total: Number(order.total),
     status: order.status,
+    shippingAddress: order.shippingAddress,
+    paymentMethod: order.paymentMethod,
     shippingAddressId: order.shippingAddressId,
     paymentIntentId: order.paymentIntentId,
     createdAt: order.createdAt.toISOString(),

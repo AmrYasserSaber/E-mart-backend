@@ -184,6 +184,8 @@ export class AdminService {
         items: order.items,
         total: Number(order.total),
         status: order.status,
+        shippingAddress: order.shippingAddress,
+        paymentMethod: order.paymentMethod,
         shippingAddressId: order.shippingAddressId,
         paymentIntentId: order.paymentIntentId,
         createdAt: order.createdAt.toISOString(),
