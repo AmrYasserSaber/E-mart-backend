@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, MoreThanOrEqual, Repository } from 'typeorm';
 import {
   User,
   toUserPublic,
@@ -403,6 +403,92 @@ export class AdminService {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getRevenueAnalytics(
+    period: RevenueAnalyticsQuery['period'] = '12m',
+  ): Promise<RevenueAnalyticsResponse> {
+    const normalizedPeriod: '7d' | '12m' = period === '7d' ? '7d' : '12m';
+    const now = new Date();
+    const from = new Date(now);
+
+    if (normalizedPeriod === '7d') {
+      from.setDate(from.getDate() - 6);
+      from.setHours(0, 0, 0, 0);
+    } else {
+      from.setMonth(from.getMonth() - 11, 1);
+      from.setHours(0, 0, 0, 0);
+    }
+
+    const orders = await this.orderRepository.find({
+      where: { createdAt: MoreThanOrEqual(from) },
+      select: {
+        id: true,
+        total: true,
+        status: true,
+        createdAt: true,
+      },
+      order: { createdAt: 'ASC' },
+    });
+
+    const buckets = new Map<string, { label: string; revenue: number }>();
+
+    if (normalizedPeriod === '7d') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString('en-US', {
+          weekday: 'short',
+        });
+        buckets.set(key, { label, revenue: 0 });
+      }
+
+      for (const order of orders) {
+        if (order.status === OrderStatus.CANCELLED) continue;
+        const key = order.createdAt.toISOString().slice(0, 10);
+        const bucket = buckets.get(key);
+        if (bucket) {
+          bucket.revenue += Number(order.total);
+        }
+      }
+    } else {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-US', {
+          month: 'short',
+        });
+        buckets.set(key, { label, revenue: 0 });
+      }
+
+      for (const order of orders) {
+        if (order.status === OrderStatus.CANCELLED) continue;
+        const d = order.createdAt;
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const bucket = buckets.get(key);
+        if (bucket) {
+          bucket.revenue += Number(order.total);
+        }
+      }
+    }
+
+    const data = Array.from(buckets.entries()).map(([key, value]) => ({
+      key,
+      label: value.label,
+      revenue: Number(value.revenue.toFixed(2)),
+    }));
+
+    const totalRevenue = Number(
+      data.reduce((sum, point) => sum + point.revenue, 0).toFixed(2),
+    );
+
+    return {
+      period: normalizedPeriod,
+      currency: 'EGP',
+      totalRevenue,
+      data,
     };
   }
 }

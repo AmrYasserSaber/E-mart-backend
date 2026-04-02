@@ -24,6 +24,7 @@ export enum OrderStatus {
 
 export interface OrderProductItem {
   productId: string;
+  sellerId?: string;
   title: string;
   qty: number;
   price: number;
@@ -68,6 +69,8 @@ export class Order {
   shippingAddress!: Address | null;
 
   @Column({ type: 'varchar' })
+  @Column({ nullable: true })
+ //TODO: only for development, in production this should be required
   paymentMethod!: string;
 
   @Column({ type: 'varchar', nullable: true })

@@ -1,16 +1,22 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
-  Get,
-  Post,
-  Patch,
-  UseGuards,
-  ParseUUIDPipe,
-  Param,
-  Query,
-  ParseIntPipe,
   DefaultValuePipe,
+  Delete,
+  Get,
   NotFoundException,
+  Param,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -38,18 +44,14 @@ import {
   SellerRegisterResponseSchema,
 } from './schemas/seller.schema';
 import {
-  CreateProductBodySchema,
   ProductIdParamSchema,
-  UpdateProductBodySchema,
   type CreateProductBody,
   type UpdateProductBody,
 } from '../products/schemas/products.schemas';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserPublic } from '../users/entities/user.entity';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../common/enums/role.enum';
+import { UploadFile } from '../upload/upload.service';
 
 @ApiTags('sellers')
 @Controller('sellers')
@@ -58,6 +60,51 @@ export class SellersController {
     private readonly sellersService: SellersService,
     private readonly productsService: ProductsService,
   ) {}
+
+  private parseRequiredNumber(raw: unknown, field: string): number {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) {
+      throw new BadRequestException(`${field} must be a valid number`);
+    }
+    return value;
+  }
+
+  private parseCreateBody(body: Record<string, unknown>): CreateProductBody {
+    const title = String(body['title'] ?? '').trim();
+    const description = String(body['description'] ?? '').trim();
+    const categoryId = String(body['categoryId'] ?? '').trim();
+
+    if (!title || !description || !categoryId) {
+      throw new BadRequestException(
+        'title, description and categoryId are required',
+      );
+    }
+
+    return {
+      title,
+      description,
+      categoryId,
+      price: this.parseRequiredNumber(body['price'], 'price'),
+      stock: this.parseRequiredNumber(body['stock'], 'stock'),
+      images: [],
+    };
+  }
+
+  private parseUpdateBody(body: Record<string, unknown>): UpdateProductBody {
+    const dto: UpdateProductBody = {};
+
+    if (body['title'] !== undefined) dto.title = String(body['title']);
+    if (body['description'] !== undefined)
+      dto.description = String(body['description']);
+    if (body['categoryId'] !== undefined)
+      dto.categoryId = String(body['categoryId']);
+    if (body['price'] !== undefined)
+      dto.price = this.parseRequiredNumber(body['price'], 'price');
+    if (body['stock'] !== undefined)
+      dto.stock = this.parseRequiredNumber(body['stock'], 'stock');
+
+    return dto;
+  }
 
   @Post('apply')
   @ApiBearerAuth()
@@ -71,7 +118,7 @@ export class SellersController {
     response: { schema: SellerRegisterResponseSchema, stripUnknownProps: true },
   })
   applyForSeller(
-    payload: SellerRegisterDto,
+    @Body() payload: SellerRegisterDto,
     @CurrentUser() currentUser: UserPublic,
   ): Promise<SellerRegisterResponse> {
     return this.sellersService.applyForSeller(currentUser.id, payload);
@@ -85,8 +132,7 @@ export class SellersController {
   @ApiOkResponse({ description: 'Seller products list response' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiForbiddenResponse({ description: 'Seller role required' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
+  @UseGuards(JwtAuthGuard)
   @Validate({
     response: {
       schema: SellerOwnProductsResponseSchema,
@@ -119,22 +165,38 @@ export class SellersController {
   @ApiForbiddenResponse({
     description: 'Seller role required and store must be approved',
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
-  @Validate({
-    request: [
-      {
-        type: 'body',
-        schema: CreateProductBodySchema,
-        stripUnknownProps: true,
-      },
-    ],
-  })
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FilesInterceptor('images', 10))
   createMyProduct(
-    payload: CreateProductBody,
+    @Body() body: Record<string, unknown>,
+    @UploadedFiles() files: UploadFile[] = [],
     @CurrentUser() currentUser: UserPublic,
   ) {
-    return this.productsService.create(payload, currentUser.id);
+    const payload = this.parseCreateBody(body);
+    return this.productsService.create(
+      payload,
+      currentUser.id,
+      files,
+      currentUser.role,
+    );
+  }
+
+  @Get('me/products/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get single own seller product' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiOkResponse({ description: 'Product details response' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiForbiddenResponse({ description: 'Seller role required' })
+  @UseGuards(JwtAuthGuard)
+  @Validate({
+    request: [{ name: 'id', type: 'param', schema: ProductIdParamSchema }],
+  })
+  findMyProductById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() currentUser: UserPublic,
+  ) {
+    return this.productsService.findOneOwnedBySeller(id, currentUser.id);
   }
 
   @Patch('me/products/:id')
@@ -146,24 +208,45 @@ export class SellersController {
   @ApiForbiddenResponse({
     description: 'Seller role required and store must be approved',
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SELLER)
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FilesInterceptor('images', 10))
   @Validate({
-    request: [
-      { name: 'id', type: 'param', schema: ProductIdParamSchema },
-      {
-        type: 'body',
-        schema: UpdateProductBodySchema,
-        stripUnknownProps: true,
-      },
-    ],
+    request: [{ name: 'id', type: 'param', schema: ProductIdParamSchema }],
   })
   updateMyProduct(
-    id: string,
-    payload: UpdateProductBody,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: Record<string, unknown>,
+    @UploadedFiles() files: UploadFile[] = [],
     @CurrentUser() currentUser: UserPublic,
   ) {
-    return this.productsService.update(id, payload, currentUser.id);
+    const payload = this.parseUpdateBody(body);
+    return this.productsService.update(
+      id,
+      payload,
+      currentUser.id,
+      files,
+      currentUser.role,
+    );
+  }
+
+  @Delete('me/products/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete product as approved seller' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiOkResponse({ description: 'Product deleted successfully' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiForbiddenResponse({
+    description: 'Seller role required and store must be approved',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Validate({
+    request: [{ name: 'id', type: 'param', schema: ProductIdParamSchema }],
+  })
+  deleteMyProduct(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() currentUser: UserPublic,
+  ) {
+    return this.productsService.remove(id, currentUser.id, currentUser.role);
   }
 
   @Get(':id')

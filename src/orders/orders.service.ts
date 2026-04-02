@@ -1,16 +1,29 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { Order, OrderPublic, toOrderPublic } from './entities/order.entity';
 import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
+import {
+  Order,
+  OrderProductItem,
+  OrderPublic,
+  OrderStatus,
+  toOrderPublic,
+} from './entities/order.entity';
 import {
   OrderDetailsResponse,
   OrdersListResponse,
+  UpdateOrderStatusBody,
+  UpdateOrderStatusResponse,
 } from './schemas/order.schema';
 import { Role } from '../common/enums/role.enum';
 import { CartService } from '../cart/cart.service';
 import { AddressesService } from '../addresses/addresses.service';
+import { Product } from '../products/entities/product.entity';
 
 @Injectable()
 export class OrdersService {
@@ -19,6 +32,8 @@ export class OrdersService {
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
     private readonly cartService: CartService,
     private readonly addressesService: AddressesService,
   ) {}
@@ -27,7 +42,7 @@ export class OrdersService {
     return toOrderPublic(order);
   }
 
-  private async toOrderDetails(order: Order): Promise<OrderDetailsResponse> {
+   private async toOrderDetails(order: Order): Promise<OrderDetailsResponse> {
     const latestPayment = await this.paymentRepository.findOne({
       where: { orderId: order.id },
       order: { createdAt: 'DESC' },
@@ -83,6 +98,27 @@ export class OrdersService {
       },
       createdAt: order.createdAt.toISOString(),
     };
+  }
+
+
+  private async getSellerProductIds(sellerUserId: string): Promise<string[]> {
+    const rows = await this.productRepository.find({
+      where: { sellerId: sellerUserId },
+      select: { id: true },
+    });
+
+    return rows.map((product) => product.id);
+  }
+
+  private sellerItemsOnly(
+    order: Order,
+    sellerUserId: string,
+    sellerProductIds: Set<string>,
+  ): OrderProductItem[] {
+    return order.items.filter(
+      (item) =>
+        item.sellerId === sellerUserId || sellerProductIds.has(item.productId),
+    );
   }
 
   async create(
@@ -151,5 +187,133 @@ export class OrdersService {
     });
     if (!order) return null;
     return this.toOrderDetails(order);
+  }
+
+  async findAllForSeller(
+    sellerUserId: string,
+    page: number,
+    limit: number,
+  ): Promise<OrdersListResponse> {
+    const sellerProductIds = await this.getSellerProductIds(sellerUserId);
+
+    const qb = this.orderRepository.createQueryBuilder('o');
+
+    if (sellerProductIds.length > 0) {
+      qb.where(
+        `EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(o.items) AS item
+          WHERE item->>'sellerId' = :sellerUserId OR item->>'productId' IN (:...productIds)
+        )`,
+        {
+          sellerUserId,
+          productIds: sellerProductIds,
+        },
+      );
+    } else {
+      qb.where(
+        `EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(o.items) AS item
+          WHERE item->>'sellerId' = :sellerUserId
+        )`,
+        { sellerUserId },
+      );
+    }
+
+    qb.orderBy('o.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [orders, total] = await qb.getManyAndCount();
+    const sellerProductIdsSet = new Set(sellerProductIds);
+
+    return {
+      data: orders.map((order) => {
+        const sellerItems = this.sellerItemsOnly(
+          order,
+          sellerUserId,
+          sellerProductIdsSet,
+        );
+
+        return {
+          id: order.id,
+          total: Number(order.total),
+          status: order.status,
+          itemsCount: sellerItems.length,
+          createdAt: order.createdAt.toISOString(),
+        };
+      }),
+      total,
+      page,
+    };
+  }
+
+  async findOneForSeller(
+    id: string,
+    sellerUserId: string,
+  ): Promise<OrderDetailsResponse | null> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) return null;
+
+    const sellerProductIds = new Set(
+      await this.getSellerProductIds(sellerUserId),
+    );
+    const sellerItems = this.sellerItemsOnly(
+      order,
+      sellerUserId,
+      sellerProductIds,
+    );
+
+    if (!sellerItems.length) {
+      return null;
+    }
+
+    return this.toOrderDetails(order);
+  }
+
+  async updateStatusForSeller(
+    id: string,
+    sellerUserId: string,
+    dto: UpdateOrderStatusBody,
+  ): Promise<UpdateOrderStatusResponse> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const sellerProductIds = new Set(
+      await this.getSellerProductIds(sellerUserId),
+    );
+    const sellerItems = this.sellerItemsOnly(
+      order,
+      sellerUserId,
+      sellerProductIds,
+    );
+
+    if (!sellerItems.length) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const allowedStatuses = new Set<OrderStatus>([
+      OrderStatus.CONFIRMED,
+      OrderStatus.SHIPPED,
+      OrderStatus.DELIVERED,
+    ]);
+
+    if (!allowedStatuses.has(dto.status)) {
+      throw new BadRequestException(
+        'Seller can set status only to confirmed, shipped, or delivered',
+      );
+    }
+
+    order.status = dto.status;
+    const saved = await this.orderRepository.save(order);
+
+    return {
+      id: saved.id,
+      status: saved.status,
+      updatedAt: saved.updatedAt.toISOString(),
+    };
   }
 }

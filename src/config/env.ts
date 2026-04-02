@@ -37,4 +37,9 @@ export const env = cleanEnv(process.env, {
   KASHIER_WEBHOOK_URL: str({ default: '' }),
   KASHIER_WEBHOOK_SECRET: str({ default: '' }),
   KASHIER_REDIRECT_URL: str({ default: '' }),
+
+  // Media / ImageKit
+  IMAGEKIT_PUBLIC_KEY: str({ default: '' }),
+  IMAGEKIT_PRIVATE_KEY: str({ default: '' }),
+  IMAGEKIT_URL_ENDPOINT: str({ default: '' }),
 });

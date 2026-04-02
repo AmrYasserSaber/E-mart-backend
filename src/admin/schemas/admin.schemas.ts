@@ -161,8 +161,8 @@ export const RevenueAnalyticsPointSchema = Type.Object({
 });
 
 export const RevenueAnalyticsResponseSchema = Type.Object({
-  period: Type.Union([Type.Literal('12m'), Type.Literal('7d')]),
-  currency: Type.String({ minLength: 3, maxLength: 3 }),
+  period: RevenueAnalyticsPeriodSchema,
+  currency: Type.String({ minLength: 1 }),
   totalRevenue: Type.Number({ minimum: 0 }),
   data: Type.Array(RevenueAnalyticsPointSchema),
 });

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
 import { Review } from '../../reviews/entities/review.entity';
+import { Seller } from '../../sellers/entities/seller.entity';
 
 @Entity('products')
 export class Product {
@@ -71,6 +72,13 @@ export class Product {
   })
   @JoinColumn({ name: 'categoryId' })
   category!: Category;
+
+  @ManyToOne(() => Seller, (seller) => seller.products, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
+  @JoinColumn({ name: 'sellerId', referencedColumnName: 'userId' })
+  seller!: Seller;
 
   @OneToMany(() => Review, (review) => review.product)
   reviews!: Review[];

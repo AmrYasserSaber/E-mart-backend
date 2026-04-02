@@ -155,6 +155,7 @@ export class AdminController {
   }
 
   @Get('analytics/revenue')
+
   @ApiOperation({ summary: 'Revenue analytics from successful payments' })
   @ValidateQueryParams(RevenueAnalyticsQuerySchema)
   @Validate({
@@ -163,10 +164,9 @@ export class AdminController {
       stripUnknownProps: true,
     },
   })
-  revenueAnalytics(
+  getRevenueAnalytics(
     @Query() query: RevenueAnalyticsQuery,
   ): Promise<RevenueAnalyticsResponse> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
-    return this.adminService.getRevenueAnalytics(query);
+    return this.adminService.getRevenueAnalytics(query.period ?? '12m');
   }
 }

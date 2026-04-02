@@ -11,6 +11,12 @@ export const ProductItemSchema = Type.Object({
     format: 'uuid',
     description: 'Product ID',
   }),
+  sellerId: Type.Optional(
+    Type.String({
+      format: 'uuid',
+      description: 'Seller user ID owning this product',
+    }),
+  ),
   title: Type.String({
     minLength: 1,
     maxLength: 255,
@@ -69,7 +75,7 @@ export const OrderResponseSchema = Type.Object({
   total: Type.Number({ minimum: 0 }),
   status: OrderStatusSchema,
   shippingAddress: Type.Union([ShippingAddressSchema, Type.Null()]),
-  paymentMethod: Type.String(),
+  paymentMethod: Type.Union([Type.String(), Type.Null()]),
   shippingAddressId: Type.Union([UuidSchema, Type.Null()]),
   paymentIntentId: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String({ format: 'date-time' }),
@@ -119,8 +125,11 @@ export const OrderDetailsResponseSchema = Type.Object({
   shippingAddressId: Type.Union([UuidSchema, Type.Null()]),
   shippingAddress: Type.Union([ShippingAddressSchema, Type.Null()]),
   payment: Type.Object({
-    method: Type.String(),
-    provider: Type.Union([Type.Literal('kashier'), Type.Literal('cash_on_delivery')]),
+    method: Type.Union([Type.String(), Type.Null()]),
+    provider: Type.Union([
+      Type.Literal('kashier'),
+      Type.Literal('cash_on_delivery'),
+    ]),
     status: Type.String({ minLength: 1 }),
   }),
   createdAt: Type.String({ format: 'date-time' }),
