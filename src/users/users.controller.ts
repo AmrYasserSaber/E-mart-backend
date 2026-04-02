@@ -31,7 +31,13 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Validate({
-    request: [{ type: 'body', schema: UpdateProfileBodySchema }],
+    request: [
+      {
+        type: 'body',
+        schema: UpdateProfileBodySchema,
+        stripUnknownProps: true,
+      },
+    ],
     response: { schema: UserPublicSchema, stripUnknownProps: true },
   })
   async updateProfile(

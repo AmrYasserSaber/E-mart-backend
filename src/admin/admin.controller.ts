@@ -155,7 +155,8 @@ export class AdminController {
   }
 
   @Get('analytics/revenue')
-  @ApiOperation({ summary: 'Get revenue analytics for dashboard (admin)' })
+
+  @ApiOperation({ summary: 'Revenue analytics from successful payments' })
   @ValidateQueryParams(RevenueAnalyticsQuerySchema)
   @Validate({
     response: {

@@ -27,6 +27,7 @@ import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
 import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
 import { Address } from '../addresses/entities/address.entity';
+import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 
 @Injectable()
 export class AdminService {
@@ -39,8 +40,124 @@ export class AdminService {
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(Seller)
     private readonly sellerRepository: Repository<Seller>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
     private readonly mailService: MailService,
   ) {}
+
+  async getRevenueAnalytics(
+    query: RevenueAnalyticsQuery,
+  ): Promise<RevenueAnalyticsResponse> {
+    const period = query.period ?? '12m';
+    const now = new Date();
+    const nowUtc = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    );
+
+    const points: Array<{ key: string; label: string; revenue: number }> = [];
+    const labelFormatter = new Intl.DateTimeFormat(
+      'en-US',
+      period === '7d'
+        ? { month: 'short', day: 'numeric', timeZone: 'UTC' }
+        : { month: 'short', timeZone: 'UTC' },
+    );
+
+    if (period === '7d') {
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const d = new Date(
+          Date.UTC(
+            nowUtc.getUTCFullYear(),
+            nowUtc.getUTCMonth(),
+            nowUtc.getUTCDate() - offset,
+          ),
+        );
+        const key = d.toISOString().slice(0, 10);
+        points.push({ key, label: labelFormatter.format(d), revenue: 0 });
+      }
+    } else {
+      for (let offset = 11; offset >= 0; offset -= 1) {
+        const d = new Date(
+          Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth() - offset, 1),
+        );
+        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        points.push({ key, label: labelFormatter.format(d), revenue: 0 });
+      }
+    }
+
+    const startKey = points[0]?.key;
+    if (!startKey) {
+      return {
+        period,
+        currency: 'EGP',
+        totalRevenue: 0,
+        data: [],
+      };
+    }
+
+    const startDate =
+      period === '7d'
+        ? new Date(`${startKey}T00:00:00.000Z`)
+        : new Date(`${startKey}-01T00:00:00.000Z`);
+
+    const successfulPayments = await this.paymentRepository.find({
+      where: {
+        status: PaymentStatus.SUCCESS,
+      },
+      select: {
+        amount: true,
+        currency: true,
+        createdAt: true,
+      },
+      order: { createdAt: 'ASC' },
+    });
+
+    const pointByKey = new Map(points.map((point) => [point.key, point]));
+    let totalRevenue = 0;
+    let primaryCurrency = 'EGP';
+
+    for (const payment of successfulPayments) {
+      if (payment.createdAt < startDate || payment.createdAt > nowUtc) {
+        continue;
+      }
+
+      const createdAt = payment.createdAt;
+      const key =
+        period === '7d'
+          ? createdAt.toISOString().slice(0, 10)
+          : `${createdAt.getUTCFullYear()}-${String(createdAt.getUTCMonth() + 1).padStart(2, '0')}`;
+
+      const point = pointByKey.get(key);
+      if (!point) continue;
+
+      const amount = Number(payment.amount) || 0;
+      point.revenue += amount;
+      totalRevenue += amount;
+
+      if (payment.currency?.trim()) {
+        primaryCurrency = payment.currency.toUpperCase();
+      }
+    }
+
+    const normalizedData = points.map((point) => ({
+      ...point,
+      revenue: Number(point.revenue.toFixed(2)),
+    }));
+
+    return {
+      period,
+      currency: primaryCurrency,
+      totalRevenue: Number(totalRevenue.toFixed(2)),
+      data: normalizedData,
+    };
+  }
 
   async listUsers(query: ListUsersQuery) {
     const { page, limit, skip } = getPagination(query);

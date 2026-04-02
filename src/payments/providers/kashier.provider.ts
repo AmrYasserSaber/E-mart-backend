@@ -61,7 +61,9 @@ export class KashierProvider {
 
     const amount = Number(params.amount).toFixed(2);
     const baseUrl = this.config.baseUrl.replace(/\/$/, '');
-    const merchantRedirect = this.resolveMerchantRedirect();
+    const redirect = new URL(this.resolveMerchantRedirect());
+    redirect.searchParams.set('orderId', params.orderId);
+    const merchantRedirect = redirect.toString();
 
     const payload = {
       amount,
