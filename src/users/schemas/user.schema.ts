@@ -51,7 +51,6 @@ export type UserPublicPayload = Static<typeof UserPublicSchema>;
 export const UpdateProfileBodySchema = Type.Object({
   firstName: Type.Optional(FirstNameSchema),
   lastName: Type.Optional(LastNameSchema),
-  email: Type.Optional(EmailSchema),
 });
 
 export type UpdateProfileBody = Static<typeof UpdateProfileBodySchema>;
