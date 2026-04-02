@@ -80,7 +80,11 @@ export class MailService {
     const templatePath = join(__dirname, fileName);
     const source = readFileSync(templatePath, 'utf8');
     const template = Handlebars.compile(source);
-    return template(data);
+    const payload: Record<string, unknown> = {
+      ...data,
+      year: new Date().getFullYear(),
+    };
+    return template(payload);
   }
 
   private async send(to: string, subject: string, html: string): Promise<void> {
