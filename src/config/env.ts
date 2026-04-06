@@ -4,6 +4,8 @@ export const env = cleanEnv(process.env, {
   // App
   PORT: port({ default: 3000 }),
   APP_URL: str({ default: 'http://localhost:3000' }),
+  FRONTEND_URL: str({ default: 'http://localhost:4200' }),
+  FRONTEND_ALLOWED_ORIGINS: str({ default: 'http://localhost:4200' }),
 
   // Database
   DB_HOST: host({ default: 'localhost' }),
@@ -27,6 +29,13 @@ export const env = cleanEnv(process.env, {
   MAIL_USER: str({ default: '' }),
   MAIL_PASS: str({ default: '' }),
   MAIL_FROM: str({ default: 'no-reply@emart.local' }),
+
+  // Google OAuth
+  GOOGLE_OAUTH_CLIENT_ID: str(),
+  GOOGLE_OAUTH_CLIENT_SECRET: str(),
+  GOOGLE_OAUTH_CALLBACK_URL: str(),
+  OAUTH_STATE_SECRET: str(),
+  OAUTH_EXCHANGE_CODE_TTL_SECONDS: port({ default: 120 }),
 
   // Payments
   STRIPE_SECRET_KEY: str({ default: '' }),

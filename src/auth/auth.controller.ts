@@ -1,5 +1,5 @@
-import { Controller, Post, Get, UseGuards, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Controller, Post, Get, UseGuards, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -12,6 +12,14 @@ import { Validate } from 'nestjs-typebox';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { UserPublic } from '../users/entities/user.entity';
+import type { GoogleUserProfile } from './strategies/google.strategy';
+import { env } from '../config/env';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { OAuthStateService } from './services/oauth-state.service';
+import { GoogleOAuthService } from './services/google-oauth.service';
+import { OAuthExchangeCodeService } from './services/oauth-exchange-code.service';
+import { UsersService } from '../users/users.service';
+import { UnauthorizedException } from '@nestjs/common';
 import {
   RegisterBodySchema,
   LoginBodySchema,
@@ -23,6 +31,7 @@ import {
   ResendVerificationBodySchema,
   ResendVerificationResponseSchema,
   LogoutResponseSchema,
+  OAuthExchangeBodySchema,
   type RegisterBody,
   type LoginBody,
   type RefreshTokenBody,
@@ -32,6 +41,7 @@ import {
   type ResendVerificationResponse,
   type AuthTokensResponse,
   type AuthTokensOnlyResponse,
+  type OAuthExchangeBody,
   RESEND_VERIFICATION_MESSAGE,
 } from './schemas/auth.schemas';
 import { UserPublicSchema } from '../users/schemas/user.schema';
@@ -39,7 +49,13 @@ import { UserPublicSchema } from '../users/schemas/user.schema';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
+    private readonly oauthStateService: OAuthStateService,
+    private readonly googleOAuthService: GoogleOAuthService,
+    private readonly oauthExchangeCodeService: OAuthExchangeCodeService,
+  ) {}
 
   @Post('register')
   @Validate({
@@ -183,6 +199,59 @@ export class AuthController {
   })
   logout(body: RefreshTokenBody) {
     return this.authService.logout(body.refreshToken);
+  }
+
+  @Get('admin/test')
+  @ApiOperation({ summary: 'Auth smoke test' })
+  adminTest(): { ok: true } {
+    return { ok: true };
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  googleLogin(): void {
+    // Passport redirect.
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleCallback(
+    @Req()
+    req: Request & { user: GoogleUserProfile; query: { state?: string } },
+    @Res() res: Response,
+  ): Promise<void> {
+    const statePayload = this.oauthStateService.executeVerifyState(
+      req.query.state,
+    );
+    const user =
+      await this.googleOAuthService.findOrCreateUserFromGoogleProfile(req.user);
+    const exchangeCode = await this.oauthExchangeCodeService.createExchangeCode(
+      {
+        userId: user.id,
+        returnUrl: statePayload.returnUrl,
+      },
+    );
+    const redirectUrl = new URL('/auth/oauth-callback', env.FRONTEND_URL);
+    redirectUrl.searchParams.set('code', exchangeCode);
+    res.redirect(redirectUrl.toString());
+  }
+
+  @Post('oauth/exchange')
+  @Validate({
+    request: [{ type: 'body', schema: OAuthExchangeBodySchema }],
+    response: { schema: AuthTokensOnlyResponseSchema, stripUnknownProps: true },
+  })
+  async exchangeOAuthCode(
+    body: OAuthExchangeBody,
+  ): Promise<AuthTokensOnlyResponse> {
+    const consumed = await this.oauthExchangeCodeService.consumeExchangeCode(
+      body.code,
+    );
+    const user = await this.usersService.findById(consumed.userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found.');
+    }
+    return this.authService.issueTokens(user, false);
   }
 
   @Get('me')

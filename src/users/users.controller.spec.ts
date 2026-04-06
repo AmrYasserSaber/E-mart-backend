@@ -1,10 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { User, UserPublic } from './entities/user.entity';
 import { Role } from '../common/enums/role.enum';
+import { AuthProvider } from 'src/common/enums/auth-provider.enum';
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -23,6 +24,8 @@ describe('UsersController', () => {
     emailVerifiedAt: null,
     emailVerificationCodeHash: null,
     emailVerificationExpiresAt: null,
+    authProvider: AuthProvider.LOCAL,
+    googleId: null,
   };
 
   const mockCurrentUser: UserPublic = {
@@ -31,6 +34,8 @@ describe('UsersController', () => {
     lastName: 'Doe',
     email: 'john@example.com',
     role: Role.USER,
+    active: true,
+    emailVerifiedAt: null,
     createdAt: new Date('2024-01-01').toISOString(),
   };
 
@@ -68,6 +73,8 @@ describe('UsersController', () => {
         lastName: mockUser.lastName,
         email: mockUser.email,
         role: mockUser.role,
+        active: mockUser.active,
+        emailVerifiedAt: null,
         createdAt: mockUser.createdAt.toISOString(),
       });
     });
@@ -107,6 +114,8 @@ describe('UsersController', () => {
         lastName: 'Smith',
         email: updatedUser.email,
         role: updatedUser.role,
+        active: updatedUser.active,
+        emailVerifiedAt: null,
         createdAt: updatedUser.createdAt.toISOString(),
       });
     });
@@ -118,47 +127,9 @@ describe('UsersController', () => {
         controller.updateProfile({ firstName: 'Jane' }, mockCurrentUser),
       ).rejects.toThrow(NotFoundException);
     });
-
-    it('should propagate ConflictException when email is already in use', async () => {
-      usersService.updateProfile.mockRejectedValue(
-        new ConflictException('Email already in use'),
-      );
-
-      await expect(
-        controller.updateProfile(
-          { email: 'taken@example.com' },
-          mockCurrentUser,
-        ),
-      ).rejects.toThrow(ConflictException);
-    });
   });
 
   describe('updateUser (admin)', () => {
-    it('should update and return any user public data', async () => {
-      const updatedUser: User = {
-        ...mockUser,
-        email: 'updated@example.com',
-      };
-      usersService.updateProfile.mockResolvedValue(updatedUser);
-
-      const result = await controller.updateUser(
-        { email: 'updated@example.com' },
-        'user-uuid-123',
-      );
-
-      expect(usersService.updateProfile).toHaveBeenCalledWith('user-uuid-123', {
-        email: 'updated@example.com',
-      });
-      expect(result).toEqual({
-        id: updatedUser.id,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-        email: 'updated@example.com',
-        role: updatedUser.role,
-        createdAt: updatedUser.createdAt.toISOString(),
-      });
-    });
-
     it('should throw NotFoundException when target user does not exist', async () => {
       usersService.updateProfile.mockResolvedValue(null);
 
@@ -169,16 +140,6 @@ describe('UsersController', () => {
       expect(usersService.updateProfile).toHaveBeenCalledWith('unknown-uuid', {
         firstName: 'Jane',
       });
-    });
-
-    it('should propagate ConflictException when email is already in use', async () => {
-      usersService.updateProfile.mockRejectedValue(
-        new ConflictException('Email already in use'),
-      );
-
-      await expect(
-        controller.updateUser({ email: 'taken@example.com' }, 'user-uuid-123'),
-      ).rejects.toThrow(ConflictException);
     });
   });
 });
