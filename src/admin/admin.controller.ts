@@ -36,6 +36,7 @@ import {
   type ManageOrderStatusBody,
   ManageOrderStatusResponseSchema,
   ApproveSellerStoreResponseSchema,
+  RejectSellerStoreResponseSchema,
   ListPendingSellersQuerySchema,
   type ListPendingSellersQuery,
   ListPendingSellersResponseSchema,
@@ -139,6 +140,19 @@ export class AdminController {
   })
   approveSellerStore(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.adminService.approveSellerStore(id);
+  }
+
+  @Patch('sellers/:id/reject')
+  @ApiOperation({ summary: 'Reject seller store (admin)' })
+  @ApiParam({ name: 'id', type: String })
+  @Validate({
+    response: {
+      schema: RejectSellerStoreResponseSchema,
+      stripUnknownProps: true,
+    },
+  })
+  rejectSellerStore(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.adminService.rejectSellerStore(id);
   }
 
   @Get('sellers/pending')

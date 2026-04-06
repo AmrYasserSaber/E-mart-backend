@@ -6,12 +6,32 @@ import {
   LastNameSchema,
   UserPublicSchema,
 } from '../../users/schemas/user.schema';
+import { Role } from '../../common/enums/role.enum';
 
 export const RegisterBodySchema = Type.Object({
   firstName: FirstNameSchema,
   lastName: LastNameSchema,
   email: EmailSchema,
   password: PlainPasswordSchema,
+  role: Type.Optional(
+    Type.Enum(Role, {
+      description: 'Requested account type at signup',
+    }),
+  ),
+  storeName: Type.Optional(
+    Type.String({
+      minLength: 2,
+      maxLength: 150,
+      description: 'Required when role is seller',
+    }),
+  ),
+  description: Type.Optional(
+    Type.String({
+      minLength: 5,
+      maxLength: 2000,
+      description: 'Seller store description, required when role is seller',
+    }),
+  ),
 });
 
 export type RegisterBody = Static<typeof RegisterBodySchema>;

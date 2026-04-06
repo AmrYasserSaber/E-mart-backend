@@ -30,7 +30,9 @@ export const ListUsersQuerySchema = Type.Object(
       }),
     ),
     role: Type.Optional(
-      Type.Enum(Role, { errorMessage: 'role must be one of: admin, user' }),
+      Type.Enum(Role, {
+        errorMessage: 'role must be one of: admin, user, seller',
+      }),
     ),
     active: Type.Optional(
       Type.Union(
@@ -110,6 +112,17 @@ export const ApproveSellerStoreResponseSchema = Type.Object({
 
 export type ApproveSellerStoreResponse = Static<
   typeof ApproveSellerStoreResponseSchema
+>;
+
+export const RejectSellerStoreResponseSchema = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  userId: Type.String({ format: 'uuid' }),
+  status: Type.String(),
+  rejectedAt: Type.String({ format: 'date-time' }),
+});
+
+export type RejectSellerStoreResponse = Static<
+  typeof RejectSellerStoreResponseSchema
 >;
 
 export const ListPendingSellersQuerySchema = Type.Object({

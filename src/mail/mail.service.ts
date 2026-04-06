@@ -43,6 +43,22 @@ export class MailService {
     await this.send(to, 'Your E-mart order confirmation', html);
   }
 
+  async sendSellerApprovedNotice(
+    to: string,
+    payload: { firstName: string; lastName: string; storeName: string },
+  ): Promise<void> {
+    const html = this.renderTemplate('seller-approved.hbs', payload);
+    await this.send(to, 'Your E-mart partner request was approved', html);
+  }
+
+  async sendSellerRejectedNotice(
+    to: string,
+    payload: { firstName: string; lastName: string; storeName: string },
+  ): Promise<void> {
+    const html = this.renderTemplate('seller-rejected.hbs', payload);
+    await this.send(to, 'Your E-mart partner request was not approved', html);
+  }
+
   async sendAdminChangeNotice(
     to: string,
     payload: {

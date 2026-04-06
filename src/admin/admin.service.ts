@@ -252,14 +252,87 @@ export class AdminService {
       throw new NotFoundException('Seller not found');
     }
 
+    const user = await this.userRepository.findOne({
+      where: { id: seller.userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     seller.status = SellerStatus.APPROVED;
-    const saved = await this.sellerRepository.save(seller);
+    user.role = Role.SELLER;
+
+    const [saved] = await Promise.all([
+      this.sellerRepository.save(seller),
+      this.userRepository.save(user),
+    ]);
+
+    if (user.email) {
+      try {
+        await this.mailService.sendSellerApprovedNotice(user.email, {
+          firstName: user.firstName ?? user.email,
+          lastName: user.lastName ?? '',
+          storeName: saved.storeName,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send seller approved notice to ${user.email} (userId=${user.id})`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+    }
 
     return {
       id: saved.id,
       userId: saved.userId,
       status: saved.status,
       approvedAt: new Date().toISOString(),
+    };
+  }
+
+  async rejectSellerStore(id: string) {
+    const seller = await this.sellerRepository.findOne({ where: { id } });
+    if (!seller) {
+      throw new NotFoundException('Seller not found');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: seller.userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    seller.status = SellerStatus.REJECTED;
+    if (user.role !== Role.ADMIN) {
+      user.role = Role.USER;
+    }
+
+    const [saved] = await Promise.all([
+      this.sellerRepository.save(seller),
+      this.userRepository.save(user),
+    ]);
+
+    if (user.email) {
+      try {
+        await this.mailService.sendSellerRejectedNotice(user.email, {
+          firstName: user.firstName ?? user.email,
+          lastName: user.lastName ?? '',
+          storeName: saved.storeName,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send seller rejected notice to ${user.email} (userId=${user.id})`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+    }
+
+    return {
+      id: saved.id,
+      userId: saved.userId,
+      status: saved.status,
+      rejectedAt: new Date().toISOString(),
     };
   }
 

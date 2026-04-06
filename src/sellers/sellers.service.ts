@@ -9,7 +9,6 @@ import { randomUUID } from 'crypto';
 import type { SellerRegisterDto } from './dto/seller-register.dto';
 import { Seller, SellerStatus, toSellerPublic } from './entities/seller.entity';
 import { User } from '../users/entities/user.entity';
-import { Role } from '../common/enums/role.enum';
 import { Product } from '../products/entities/product.entity';
 import {
   SellerOwnProductsResponse,
@@ -41,9 +40,6 @@ export class SellersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-
-    user.role = Role.SELLER;
-    await this.userRepository.save(user);
 
     const seller = this.sellerRepository.create({
       userId,

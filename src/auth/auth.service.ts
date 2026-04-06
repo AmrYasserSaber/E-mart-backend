@@ -21,6 +21,8 @@ import { MailService } from '../mail/mail.service';
 import { User, UserPublic, toUserPublic } from '../users/entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { env } from '../config/env';
+import { Role } from '../common/enums/role.enum';
+import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
 import {
   RESEND_VERIFICATION_MESSAGE,
   type AuthTokensResponse,
@@ -40,8 +42,34 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
+    @InjectRepository(Seller)
+    private readonly sellerRepository: Repository<Seller>,
     private readonly dataSource: DataSource,
   ) {}
+
+  private assertValidSellerSignupPayload(
+    storeName?: string,
+    description?: string,
+  ): { storeName: string; description: string } {
+    const normalizedStoreName = storeName?.trim() ?? '';
+    const normalizedDescription = description?.trim() ?? '';
+
+    if (!normalizedStoreName) {
+      throw new BadRequestException(
+        'storeName is required when role is seller',
+      );
+    }
+    if (!normalizedDescription) {
+      throw new BadRequestException(
+        'description is required when role is seller',
+      );
+    }
+
+    return {
+      storeName: normalizedStoreName,
+      description: normalizedDescription,
+    };
+  }
 
   private hashRefreshToken(rawToken: string): string {
     return createHash('sha256').update(rawToken).digest('hex');
@@ -155,10 +183,17 @@ export class AuthService {
     lastName: string,
     email: string,
     password: string,
+    role: Role = Role.USER,
+    storeName?: string,
+    description?: string,
   ): Promise<AuthTokensResponse> {
     const existingUser = await this.usersService.findByEmail(email);
     if (existingUser) {
       throw new ConflictException('Email already registered');
+    }
+
+    if (role === Role.ADMIN) {
+      throw new BadRequestException('Admin role cannot be requested at signup');
     }
 
     const user = await this.usersService.create(
@@ -167,6 +202,21 @@ export class AuthService {
       email,
       password,
     );
+
+    if (role === Role.SELLER) {
+      const sellerPayload = this.assertValidSellerSignupPayload(
+        storeName,
+        description,
+      );
+      const seller = this.sellerRepository.create({
+        userId: user.id,
+        storeName: sellerPayload.storeName,
+        description: sellerPayload.description,
+        status: SellerStatus.PENDING,
+        rating: 0,
+      });
+      await this.sellerRepository.save(seller);
+    }
 
     const code = this.generateEmailVerificationCode();
     const codeHash = this.hashEmailVerificationCode(code);

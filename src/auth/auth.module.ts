@@ -18,6 +18,7 @@ import { GoogleOAuthService } from './services/google-oauth.service';
 import { OAuthExchangeCodeService } from './services/oauth-exchange-code.service';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { User } from '../users/entities/user.entity';
+import { Seller } from '../sellers/entities/seller.entity';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { User } from '../users/entities/user.entity';
     MailModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({ useFactory: jwtConfig }),
-    TypeOrmModule.forFeature([RefreshToken, OAuthExchangeCode, User]),
+    TypeOrmModule.forFeature([RefreshToken, OAuthExchangeCode, User, Seller]),
   ],
   controllers: [AuthController],
   providers: [

@@ -15,6 +15,7 @@ import { MailService } from '../mail/mail.service';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../common/enums/role.enum';
+import { Seller, SellerStatus } from '../sellers/entities/seller.entity';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -22,6 +23,7 @@ describe('AuthService', () => {
   let mailService: jest.Mocked<Pick<MailService, 'sendConfirmationEmail'>>;
   let jwtService: jest.Mocked<JwtService>;
   let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+  let sellerRepository: jest.Mocked<Repository<Seller>>;
   let dataSource: jest.Mocked<DataSource>;
 
   const mockUser: User = {
@@ -78,6 +80,11 @@ describe('AuthService', () => {
       delete: jest.fn(),
     };
 
+    const mockSellerRepository = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+
     const mockDataSource = {
       transaction: jest.fn(),
     };
@@ -92,6 +99,10 @@ describe('AuthService', () => {
           provide: getRepositoryToken(RefreshToken),
           useValue: mockRefreshTokenRepo,
         },
+        {
+          provide: getRepositoryToken(Seller),
+          useValue: mockSellerRepository,
+        },
         { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
@@ -101,6 +112,7 @@ describe('AuthService', () => {
     mailService = module.get(MailService);
     jwtService = module.get(JwtService);
     refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
+    sellerRepository = module.get(getRepositoryToken(Seller));
     dataSource = module.get(DataSource);
   });
 
@@ -161,6 +173,82 @@ describe('AuthService', () => {
 
       expect(usersService.create).not.toHaveBeenCalled();
       expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
+    });
+
+    it('should create a pending seller request when registering as seller', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      usersService.create.mockResolvedValue(mockUser);
+      const mockSeller = {
+        id: 'seller-1',
+        userId: mockUser.id,
+        storeName: 'Green Store',
+        description: 'Eco products for daily life',
+        status: SellerStatus.PENDING,
+        rating: 0,
+        createdAt: new Date(),
+      } as Seller;
+      sellerRepository.create.mockReturnValue(mockSeller);
+      sellerRepository.save.mockResolvedValue(mockSeller);
+      refreshTokenRepository.create.mockReturnValue(mockRefreshToken);
+      refreshTokenRepository.save.mockResolvedValue(mockRefreshToken);
+
+      const result = await authService.register(
+        'John',
+        'Doe',
+        'john@example.com',
+        'password123',
+        Role.SELLER,
+        'Green Store',
+        'Eco products for daily life',
+      );
+
+      expect(sellerRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: mockUser.id,
+          storeName: 'Green Store',
+          description: 'Eco products for daily life',
+          status: SellerStatus.PENDING,
+          rating: 0,
+        }),
+      );
+      expect(sellerRepository.save).toHaveBeenCalledTimes(1);
+      expect(result.user.role).toBe(Role.USER);
+    });
+
+    it('should reject admin role request at signup', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        authService.register(
+          'John',
+          'Doe',
+          'john@example.com',
+          'password123',
+          Role.ADMIN,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(usersService.create).not.toHaveBeenCalled();
+      expect(sellerRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should require seller profile fields for seller signup', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      usersService.create.mockResolvedValue(mockUser);
+
+      await expect(
+        authService.register(
+          'John',
+          'Doe',
+          'john@example.com',
+          'password123',
+          Role.SELLER,
+          '',
+          '',
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(sellerRepository.save).not.toHaveBeenCalled();
     });
   });
 

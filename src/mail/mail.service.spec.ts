@@ -51,4 +51,38 @@ describe('MailService', () => {
       }),
     );
   });
+
+  it('sends seller approved notice email', async () => {
+    const service = new MailService(configService);
+
+    await service.sendSellerApprovedNotice('seller@test.local', {
+      firstName: 'Seller',
+      lastName: 'User',
+      storeName: 'Green Cart',
+    });
+
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'seller@test.local',
+        subject: 'Your E-mart partner request was approved',
+      }),
+    );
+  });
+
+  it('sends seller rejected notice email', async () => {
+    const service = new MailService(configService);
+
+    await service.sendSellerRejectedNotice('seller@test.local', {
+      firstName: 'Seller',
+      lastName: 'User',
+      storeName: 'Green Cart',
+    });
+
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'seller@test.local',
+        subject: 'Your E-mart partner request was not approved',
+      }),
+    );
+  });
 });

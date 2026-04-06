@@ -68,6 +68,9 @@ export class AuthController {
       body.lastName,
       body.email,
       body.password,
+      body.role,
+      body.storeName,
+      body.description,
     );
   }
 
