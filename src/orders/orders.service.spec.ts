@@ -4,6 +4,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { Product } from '../products/entities/product.entity';
 import { CartService } from '../cart/cart.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { Role } from '../common/enums/role.enum';
@@ -50,6 +52,15 @@ describe('OrdersService', () => {
       findAndCount: jest.fn(),
     };
 
+    const mockPaymentRepository = {
+      findOne: jest.fn(),
+    };
+
+    const mockProductRepository = {
+      find: jest.fn(),
+      createQueryBuilder: jest.fn(),
+    };
+
     const mockCartService = {
       getCartSummary: jest.fn(),
       clearCart: jest.fn(),
@@ -65,6 +76,14 @@ describe('OrdersService', () => {
         {
           provide: getRepositoryToken(Order),
           useValue: mockOrderRepository,
+        },
+        {
+          provide: getRepositoryToken(Payment),
+          useValue: mockPaymentRepository,
+        },
+        {
+          provide: getRepositoryToken(Product),
+          useValue: mockProductRepository,
         },
         { provide: CartService, useValue: mockCartService },
         { provide: AddressesService, useValue: mockAddressesService },
@@ -91,6 +110,7 @@ describe('OrdersService', () => {
 
       const actual = await service.create(USER_ID, {
         addressId: ADDRESS_ID,
+        paymentMethod: 'CASH_ON_DELIVERY',
       });
 
       expect(addressesService.assertAddressExistsForUser).toHaveBeenCalledWith(
@@ -101,6 +121,7 @@ describe('OrdersService', () => {
         userId: USER_ID,
         items: mockOrder().items,
         total: 10,
+        paymentMethod: 'CASH_ON_DELIVERY',
         shippingAddressId: ADDRESS_ID,
         paymentIntentId: null,
       });
@@ -115,7 +136,10 @@ describe('OrdersService', () => {
       );
 
       await expect(
-        service.create(USER_ID, { addressId: ADDRESS_ID }),
+        service.create(USER_ID, {
+          addressId: ADDRESS_ID,
+          paymentMethod: 'CASH_ON_DELIVERY',
+        }),
       ).rejects.toThrow(NotFoundException);
 
       expect(orderRepository.create).not.toHaveBeenCalled();

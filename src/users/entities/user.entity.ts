@@ -7,6 +7,7 @@ import {
   OneToOne,
 } from 'typeorm';
 import { Role } from '../../common/enums/role.enum';
+import { AuthProvider } from '../../common/enums/auth-provider.enum';
 import { Seller } from '../../sellers/entities/seller.entity';
 
 @Entity('users')
@@ -23,8 +24,14 @@ export class User {
   @Column({ unique: true })
   email!: string;
 
-  @Column()
-  passwordHash!: string;
+  @Column({ type: 'varchar', default: AuthProvider.LOCAL })
+  authProvider!: AuthProvider;
+
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  googleId!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  passwordHash!: string | null;
 
   @Column({ type: 'varchar', default: Role.USER })
   role!: Role;

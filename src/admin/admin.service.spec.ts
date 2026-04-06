@@ -4,14 +4,18 @@ import { AdminService } from './admin.service';
 import { User } from '../users/entities/user.entity';
 import { MailService } from '../mail/mail.service';
 import { Role } from '../common/enums/role.enum';
+import { Order } from '../orders/entities/order.entity';
+import { Seller } from '../sellers/entities/seller.entity';
+import { Payment } from '../payments/entities/payment.entity';
 
 describe('AdminService', () => {
   const mockRepository: jest.Mocked<
-    Pick<Repository<User>, 'findAndCount' | 'findOne' | 'save'>
+    Pick<Repository<User>, 'findAndCount' | 'findOne' | 'save' | 'count'>
   > = {
     findAndCount: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
+    count: jest.fn(),
   };
 
   const mockMailService: jest.Mocked<
@@ -22,6 +26,9 @@ describe('AdminService', () => {
 
   const service = new AdminService(
     mockRepository as Repository<User>,
+    {} as Repository<Order>,
+    {} as Repository<Seller>,
+    {} as Repository<Payment>,
     mockMailService as MailService,
   );
 
@@ -63,6 +70,7 @@ describe('AdminService', () => {
     };
 
     mockRepository.findOne.mockResolvedValue(existingUser);
+    mockRepository.count.mockResolvedValue(2);
     mockRepository.save = jest.fn().mockResolvedValue(existingUser);
 
     const result = await service.manageUser(existingUser.id, {

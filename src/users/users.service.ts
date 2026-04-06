@@ -101,6 +101,9 @@ export class UsersService {
   }
 
   async validatePassword(user: User, plainPassword: string): Promise<boolean> {
+    if (!user.passwordHash) {
+      return false;
+    }
     return bcrypt.compare(plainPassword, user.passwordHash);
   }
 
