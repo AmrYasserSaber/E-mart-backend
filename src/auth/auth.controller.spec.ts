@@ -9,10 +9,16 @@ import type {
   AuthTokensOnlyResponse,
 } from './schemas/auth.schemas';
 import { RESEND_VERIFICATION_MESSAGE } from './schemas/auth.schemas';
+import { UsersService } from '../users/users.service';
+import { OAuthStateService } from './services/oauth-state.service';
+import { GoogleOAuthService } from './services/google-oauth.service';
+import { OAuthExchangeCodeService } from './services/oauth-exchange-code.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
   let authService: jest.Mocked<AuthService>;
+  let usersService: jest.Mocked<UsersService>;
+  let oauthExchangeCodeService: jest.Mocked<OAuthExchangeCodeService>;
 
   const mockUserPublic: UserPublic = {
     id: 'user-uuid-123',
@@ -20,6 +26,8 @@ describe('AuthController', () => {
     lastName: 'Doe',
     email: 'john@example.com',
     role: Role.USER,
+    active: true,
+    emailVerifiedAt: null,
     createdAt: '2024-01-01T00:00:00.000Z',
   };
 
@@ -43,12 +51,37 @@ describe('AuthController', () => {
       refresh: jest.fn(),
       logout: jest.fn(),
       validateUserFromJwt: jest.fn(),
+      issueTokens: jest.fn(),
+    };
+
+    const mockUsersService = {
+      findById: jest.fn(),
+    };
+
+    const mockOAuthStateService = {
+      executeVerifyState: jest.fn(),
+    };
+
+    const mockGoogleOAuthService = {
+      executeFindOrCreateUserFromGoogleProfile: jest.fn(),
+    };
+
+    const mockOAuthExchangeCodeService = {
+      executeConsumeExchangeCode: jest.fn(),
+      executeCreateExchangeCode: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: mockAuthService },
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: OAuthStateService, useValue: mockOAuthStateService },
+        { provide: GoogleOAuthService, useValue: mockGoogleOAuthService },
+        {
+          provide: OAuthExchangeCodeService,
+          useValue: mockOAuthExchangeCodeService,
+        },
         {
           provide: ConfigService,
           useValue: { getOrThrow: jest.fn().mockReturnValue('test-secret') },
@@ -58,6 +91,8 @@ describe('AuthController', () => {
 
     controller = module.get<AuthController>(AuthController);
     authService = module.get(AuthService);
+    usersService = module.get(UsersService);
+    oauthExchangeCodeService = module.get(OAuthExchangeCodeService);
   });
 
   describe('register', () => {
@@ -166,6 +201,43 @@ describe('AuthController', () => {
       const result = controller.me(req as never);
 
       expect(result).toEqual(mockUserPublic);
+    });
+  });
+
+  describe('adminTest', () => {
+    it('returns ok true', () => {
+      expect(controller.adminTest()).toEqual({ ok: true });
+    });
+  });
+
+  describe('exchangeOAuthCode', () => {
+    it('consumes code and issues tokens', async () => {
+      oauthExchangeCodeService.consumeExchangeCode.mockResolvedValue({
+        userId: 'user-uuid-123',
+        returnUrl: '/profile',
+      });
+      usersService.findById.mockResolvedValue({
+        id: 'user-uuid-123',
+      } as never);
+      authService.issueTokens.mockResolvedValue({
+        accessToken: 'access',
+        refreshToken: 'refresh',
+      });
+
+      const result = await controller.exchangeOAuthCode({ code: 'abc' });
+
+      expect(oauthExchangeCodeService.consumeExchangeCode).toHaveBeenCalledWith(
+        'abc',
+      );
+      expect(usersService.findById).toHaveBeenCalledWith('user-uuid-123');
+      expect(authService.issueTokens).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'user-uuid-123' }),
+        false,
+      );
+      expect(result).toEqual({
+        accessToken: 'access',
+        refreshToken: 'refresh',
+      });
     });
   });
 });

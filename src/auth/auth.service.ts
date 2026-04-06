@@ -109,15 +109,12 @@ export class AuthService {
     }
   }
 
-  private async issueTokens(
-    user: User,
-    includeUser: true,
-  ): Promise<AuthTokensResponse>;
-  private async issueTokens(
+  async issueTokens(user: User, includeUser: true): Promise<AuthTokensResponse>;
+  async issueTokens(
     user: User,
     includeUser: false,
   ): Promise<AuthTokensOnlyResponse>;
-  private async issueTokens(
+  async issueTokens(
     user: User,
     includeUser: boolean,
   ): Promise<AuthTokensResponse | AuthTokensOnlyResponse> {

@@ -91,3 +91,13 @@ export const LogoutResponseSchema = Type.Object({
 });
 
 export type LogoutResponse = Static<typeof LogoutResponseSchema>;
+
+export const OAuthExchangeBodySchema = Type.Object({
+  code: Type.String({
+    minLength: 1,
+    description:
+      'One-time OAuth exchange code from the Google callback redirect',
+  }),
+});
+
+export type OAuthExchangeBody = Static<typeof OAuthExchangeBodySchema>;
