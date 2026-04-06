@@ -35,6 +35,7 @@ function isSafeRelativeReturnUrl(returnUrl: string): boolean {
   const trimmed = returnUrl.trim();
   if (!trimmed.startsWith('/')) return false;
   if (trimmed.startsWith('//')) return false;
+  if (trimmed.includes('\\')) return false;
   return true;
 }
 
@@ -71,7 +72,12 @@ export class OAuthStateService {
       throw new BadRequestException('Invalid OAuth state.');
     }
     const raw = fromBase64Url(payloadB64);
-    const payload = JSON.parse(raw) as OAuthStatePayload;
+    let payload: OAuthStatePayload;
+    try {
+      payload = JSON.parse(raw) as OAuthStatePayload;
+    } catch {
+      throw new BadRequestException('Invalid OAuth state.');
+    }
     if (
       typeof payload.iat !== 'number' ||
       Date.now() - payload.iat > OAUTH_STATE_TTL_MS

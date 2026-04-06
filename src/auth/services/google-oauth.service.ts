@@ -36,9 +36,6 @@ export class GoogleOAuthService {
       if (!existingByEmail.emailVerifiedAt) {
         existingByEmail.emailVerifiedAt = new Date();
       }
-      if (existingByEmail.authProvider === AuthProvider.LOCAL) {
-        existingByEmail.authProvider = AuthProvider.GOOGLE;
-      }
       return this.userRepository.save(existingByEmail);
     }
 
